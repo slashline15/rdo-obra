@@ -1,0 +1,48 @@
+"""Rota para geração do RDO (PDF)."""
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse, HTMLResponse
+from sqlalchemy.orm import Session
+from datetime import date
+
+from app.database import get_db
+from app.schemas import RDORequest
+from app.services.rdo_generator import gerar_rdo_pdf, gerar_rdo_data, gerar_rdo_html
+
+router = APIRouter(prefix="/rdo", tags=["RDO - Relatório"])
+
+
+@router.post("/gerar")
+def gerar_rdo(request: RDORequest, db: Session = Depends(get_db)):
+    try:
+        if request.formato == "json":
+            data = gerar_rdo_data(request.obra_id, request.data, db)
+            return {
+                "obra": data["obra"].nome,
+                "data": str(data["data"]),
+                "total_efetivo": data["total_efetivo"],
+                "iniciadas": len(data["iniciadas"]),
+                "em_andamento": len(data["em_andamento"]),
+                "concluidas": len(data["concluidas"]),
+                "materiais": len(data["materiais"]),
+                "equipamentos": len(data["equipamentos"]),
+                "anotacoes": len(data["anotacoes"]),
+                "climas": len(data["climas"]),
+                "fotos": len(data["fotos"]),
+            }
+
+        filepath = gerar_rdo_pdf(request.obra_id, request.data, db)
+        return FileResponse(filepath, media_type="application/pdf", filename=filepath.split("/")[-1])
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/preview/{obra_id}/{data_ref}")
+def preview_rdo(obra_id: int, data_ref: date, db: Session = Depends(get_db)):
+    try:
+        data = gerar_rdo_data(obra_id, data_ref, db)
+        html = gerar_rdo_html(data)
+        return HTMLResponse(content=html)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

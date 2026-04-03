@@ -1,0 +1,87 @@
+# Ambiente e segredos
+.env
+*.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.pyc
+*.pdb
+
+# Virtualenv
+venv/
+.venv/
+env/
+ENV/
+.python-version
+
+# Dependências
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+wheels/
+*.whl
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs e arquivos temporários
+*.log
+*.tmp
+*.bak
+*.orig
+logs/
+temp/
+
+# Uploads de mídia e áudios
+uploads/
+media/
+*.ogg
+*.mp3
+*.m4a
+*.wav
+*.oga
+
+# PDFs gerados
+output/
+*.pdf
+
+# Banco de dados local
+*.sqlite
+*.sqlite3
+*.db
+
+# Pytest e coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Mypy
+.mypy_cache/
+
+# Claude/workspace
+.claude/
