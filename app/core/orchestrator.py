@@ -24,12 +24,24 @@ from app.services.intent import classify_intent
 from app.services.transcription import transcribe_audio
 
 
+# Textos pendentes por chat_id (aguardando escolha de botão)
+# Em memória — suficiente pro MVP, depois migra pra Redis/banco
+_textos_pendentes: dict[str, str] = {}
+
+
 class Orchestrator:
     """Processa mensagens de qualquer canal e orquestra o registro."""
 
     def __init__(self, db: Session):
         self.db = db
         self.relations = RelationEngine(db)
+
+    def _salvar_texto_pendente(self, telefone: str, texto: str):
+        _textos_pendentes[telefone] = texto
+
+    @staticmethod
+    def _recuperar_texto_pendente(telefone: str) -> str:
+        return _textos_pendentes.pop(telefone, "")
 
     async def processar(self, msg: IncomingMessage) -> OutgoingMessage:
         """Ponto de entrada único para todas as mensagens."""
@@ -71,10 +83,20 @@ class Orchestrator:
         data = intent.get("data", {})
         confidence = intent.get("confidence", 0)
 
-        # 4. Confiança baixa → pedir reformulação
+        # 4. Confiança baixa → botões para escolher, não pedir reformulação
         if confidence < 0.6:
-            confirm = intent.get("confirmation_message", "Pode repetir de outra forma?")
-            return self._resposta(msg, f"🤔 {confirm}")
+            candidates = intent.get("candidates", [])
+            if not candidates:
+                candidates = ["atividade", "efetivo", "clima", "material", "anotacao"]
+
+            # Guardar texto original na sessão do orchestrator para recuperar no callback
+            # callback_data do Telegram tem limite de 64 bytes
+            self._salvar_texto_pendente(msg.telefone, texto)
+
+            return self._resposta(msg, "📋 O que você quer registrar?", botoes=[
+                {"text": label, "data": f"forcar:{cat}"}
+                for cat, label in self._botoes_para_candidatos(candidates)
+            ])
 
         # 5. Confirmar se necessário
         if intent.get("requires_confirmation"):
@@ -208,10 +230,23 @@ class Orchestrator:
         return f"✅ Material ({mat.tipo}): {qtd}{mat.material}"
 
     def _registrar_equipamento(self, data, obra_id, registrado_por, texto_original, hoje):
+        tipos_validos = {"entrada", "saída", "saida", "manutenção", "manutencao", "aluguel"}
+        tipo = data.get("tipo", "entrada").lower()
+        equipamento = data.get("equipamento", "Não especificado")
+
+        # LLM às vezes inverte tipo/equipamento — corrigir
+        if tipo not in tipos_validos:
+            if equipamento.lower() in tipos_validos:
+                tipo, equipamento = equipamento.lower(), tipo
+            else:
+                # tipo contém o nome do equipamento
+                equipamento = tipo
+                tipo = "entrada"
+
         equip = Equipamento(
             obra_id=obra_id, data=hoje,
-            tipo=data.get("tipo", "entrada"),
-            equipamento=data.get("equipamento", "Não especificado"),
+            tipo=tipo[:30],
+            equipamento=equipamento,
             quantidade=data.get("quantidade", 1),
             horas_trabalhadas=data.get("horas_trabalhadas"),
             operador=data.get("operador"),
@@ -220,7 +255,7 @@ class Orchestrator:
         )
         self.db.add(equip)
         self.db.commit()
-        return f"✅ Equipamento ({equip.tipo}): {equip.equipamento}"
+        return f"✅ Equipamento ({equip.tipo}): {equip.quantidade}x {equip.equipamento}"
 
     def _registrar_clima(self, data, obra_id, texto_original, hoje):
         cl = Clima(
@@ -268,6 +303,66 @@ class Orchestrator:
         self.db.add(foto)
         self.db.commit()
         return f"✅ Foto registrada: {foto.descricao or 'sem descrição'}"
+
+    INTENT_LABELS = {
+        "atividade": "🏗️ Atividade",
+        "conclusao": "✅ Conclusão",
+        "efetivo": "👷 Efetivo",
+        "material": "📦 Material",
+        "equipamento": "🔧 Equipamento",
+        "clima": "☁️ Clima",
+        "anotacao": "📝 Anotação",
+        "foto": "📷 Foto",
+    }
+
+    def _botoes_para_candidatos(self, candidates: list) -> list:
+        """Retorna lista de (intent, label) para os botões."""
+        return [(c, self.INTENT_LABELS.get(c, c)) for c in candidates if c in self.INTENT_LABELS]
+
+    async def processar_callback(self, callback_data: str, telefone: str,
+                                  usuario_nome: str, obra_id: int) -> str:
+        """Processa clique em botão inline (forcar:intent)."""
+        parts = callback_data.split(":", 2)
+        if len(parts) < 2 or parts[0] != "forcar":
+            return "❌ Ação inválida."
+
+        intent_type = parts[1]
+        texto_original = self._recuperar_texto_pendente(telefone)
+        if not texto_original:
+            return "⚠️ Mensagem expirou. Mande de novo."
+
+        # Re-classificar com hint forçado para extrair dados
+        try:
+            from app.services.intent import _call_ollama
+            llm_data = await _call_ollama(texto_original, hint=intent_type)
+            data = llm_data.get("data", {})
+        except Exception:
+            data = {}
+
+        hoje = date.today()
+        return self._registrar_sync(intent_type, data, obra_id, usuario_nome, texto_original, hoje)
+
+    def _registrar_sync(self, intent: str, data: dict, obra_id: int,
+                        registrado_por: str, texto_original: str, hoje=None) -> str:
+        """Versão síncrona do registro (para callbacks)."""
+        hoje = hoje or date.today()
+
+        if intent == "atividade":
+            return self._registrar_atividade(data, obra_id, registrado_por, texto_original, hoje)
+        elif intent == "conclusao":
+            return self._concluir_atividade(data, obra_id, registrado_por, texto_original)
+        elif intent == "efetivo":
+            return self._registrar_efetivo(data, obra_id, registrado_por, texto_original, hoje)
+        elif intent == "material":
+            return self._registrar_material(data, obra_id, registrado_por, texto_original, hoje)
+        elif intent == "equipamento":
+            return self._registrar_equipamento(data, obra_id, registrado_por, texto_original, hoje)
+        elif intent == "clima":
+            return self._registrar_clima(data, obra_id, texto_original, hoje)
+        elif intent == "anotacao":
+            return self._registrar_anotacao(data, obra_id, registrado_por, texto_original, hoje)
+        else:
+            return f"🤔 Categoria '{intent}' não suportada."
 
     def _resposta(self, msg: IncomingMessage, texto: str, botoes: list = None) -> OutgoingMessage:
         return OutgoingMessage(

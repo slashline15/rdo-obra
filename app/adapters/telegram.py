@@ -84,6 +84,22 @@ class TelegramAdapter(BaseAdapter):
             resp = await client.post(f"{self.base_url}/sendMessage", json=payload)
             return resp.status_code == 200
 
+    async def answer_callback(self, callback_query_id: str) -> bool:
+        """Responde callback query (remove loading do botão)."""
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{self.base_url}/answerCallbackQuery",
+                json={"callback_query_id": callback_query_id}
+            )
+            return resp.status_code == 200
+
+    async def send_message_raw(self, chat_id: str, text: str) -> bool:
+        """Envia mensagem simples por chat_id (sem OutgoingMessage)."""
+        payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(f"{self.base_url}/sendMessage", json=payload)
+            return resp.status_code == 200
+
     async def send_document(self, telefone: str, file_path: str, caption: str = None) -> bool:
         """Envia PDF ou documento."""
         async with httpx.AsyncClient() as client:

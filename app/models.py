@@ -264,7 +264,7 @@ class Equipamento(Base):
     id = Column(Integer, primary_key=True, index=True)
     obra_id = Column(Integer, ForeignKey("obras.id"), nullable=False)
     data = Column(Date, default=date.today)
-    tipo = Column(String(15), nullable=False)  # entrada, saída, manutenção
+    tipo = Column(String(30), nullable=False)  # entrada, saída, manutenção, aluguel
     equipamento = Column(String(255), nullable=False)
     quantidade = Column(Integer, default=1)
     horas_trabalhadas = Column(Float)
