@@ -30,6 +30,7 @@ class ObraBase(BaseModel):
     data_inicio: Optional[date] = None
     data_fim_prevista: Optional[date] = None
     status: Optional[str] = "ativa"
+    usuario_admin: Optional[int] = None
 
 class ObraCreate(ObraBase):
     pass
