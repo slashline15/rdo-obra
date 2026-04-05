@@ -18,7 +18,8 @@ from app.core.types import IncomingMessage, OutgoingMessage, IntentType, TipoMen
 from app.core.relations import RelationEngine
 from app.models import (
     Usuario, Atividade, Efetivo, Anotacao, Material,
-    Equipamento, Clima, Foto, AtividadeStatus
+    Equipamento, Clima, Foto, Expediente, Obra,
+    AtividadeStatus, StatusPluviometrico, TipoEfetivo
 )
 from app.services.intent import classify_intent
 from app.services.transcription import transcribe_audio
@@ -136,6 +137,8 @@ class Orchestrator:
             return self._registrar_equipamento(data, obra_id, registrado_por, texto_original, hoje)
         elif intent == "clima":
             return self._registrar_clima(data, obra_id, texto_original, hoje)
+        elif intent == "expediente":
+            return self._registrar_expediente(data, obra_id, registrado_por, texto_original, hoje)
         elif intent == "anotacao":
             return self._registrar_anotacao(data, obra_id, registrado_por, texto_original, hoje)
         elif intent == "foto" and foto_path:
@@ -190,20 +193,79 @@ class Orchestrator:
 
     def _registrar_efetivo(self, data, obra_id, registrado_por, texto_original, hoje):
         registros = data.get("registros", [data])
-        nomes = []
+        proprios, empreiteiros = [], []
+
         for reg in registros:
+            tipo_str = reg.get("tipo", "proprio")
+            try:
+                tipo = TipoEfetivo(tipo_str)
+            except ValueError:
+                tipo = TipoEfetivo.PROPRIO
+
             ef = Efetivo(
                 obra_id=obra_id, data=hoje,
-                funcao=reg.get("funcao", "Geral"),
+                tipo=tipo,
+                funcao=reg.get("funcao"),
                 quantidade=reg.get("quantidade", 1),
-                empresa=reg.get("empresa", "própria"),
+                empresa=reg.get("empresa"),
                 registrado_por=registrado_por,
                 texto_original=texto_original
             )
             self.db.add(ef)
-            nomes.append(f"{ef.quantidade} {ef.funcao}")
+
+            if tipo == TipoEfetivo.PROPRIO:
+                label = f"{ef.quantidade} {ef.funcao or 'geral'}"
+                proprios.append(label)
+            else:
+                label = f"{ef.quantidade} ({ef.empresa or 'empreiteira'})"
+                empreiteiros.append(label)
+
         self.db.commit()
-        return f"✅ Efetivo: {', '.join(nomes)}"
+
+        total_proprio = sum(r.get("quantidade", 1) for r in registros if r.get("tipo", "proprio") == "proprio")
+        total_emp = sum(r.get("quantidade", 1) for r in registros if r.get("tipo") == "empreiteiro")
+        total_geral = total_proprio + total_emp
+
+        linhas = ["✅ Efetivo registrado:"]
+        if proprios:
+            linhas.append(f"  Empresa: {', '.join(proprios)} (total: {total_proprio})")
+        if empreiteiros:
+            linhas.append(f"  Empreiteiras: {', '.join(empreiteiros)} (total: {total_emp})")
+        linhas.append(f"  Total geral: {total_geral}")
+        return "\n".join(linhas)
+
+    def _registrar_expediente(self, data, obra_id, registrado_por, texto_original, hoje):
+        """Registra ou atualiza o horário do dia. Usa padrão da obra se campos faltarem."""
+        obra = self.db.query(Obra).filter(Obra.id == obra_id).first()
+
+        hora_inicio = data.get("hora_inicio") or (obra.hora_inicio_padrao if obra else "07:00")
+        hora_termino = data.get("hora_termino") or (obra.hora_termino_padrao if obra else "17:00")
+
+        exp = self.db.query(Expediente).filter(
+            Expediente.obra_id == obra_id,
+            Expediente.data == hoje
+        ).first()
+
+        if exp:
+            exp.hora_inicio = hora_inicio
+            exp.hora_termino = hora_termino
+            exp.motivo = data.get("motivo") or exp.motivo
+            exp.texto_original = texto_original
+        else:
+            exp = Expediente(
+                obra_id=obra_id, data=hoje,
+                hora_inicio=hora_inicio,
+                hora_termino=hora_termino,
+                motivo=data.get("motivo"),
+                registrado_por=registrado_por,
+                texto_original=texto_original
+            )
+            self.db.add(exp)
+
+        self.db.commit()
+
+        motivo_str = f" — {exp.motivo}" if exp.motivo else ""
+        return f"✅ Expediente: {exp.hora_inicio}–{exp.hora_termino}{motivo_str}"
 
     def _registrar_material(self, data, obra_id, registrado_por, texto_original, hoje):
         mat = Material(
@@ -258,25 +320,72 @@ class Orchestrator:
         return f"✅ Equipamento ({equip.tipo}): {equip.quantidade}x {equip.equipamento}"
 
     def _registrar_clima(self, data, obra_id, texto_original, hoje):
-        cl = Clima(
-            obra_id=obra_id, data=hoje,
-            periodo=data.get("periodo"),
-            condicao=data.get("condicao"),
-            temperatura=data.get("temperatura"),
-            impacto_trabalho=data.get("impacto_trabalho"),
-            dia_improdutivo=data.get("dia_improdutivo", False),
-            texto_original=texto_original
-        )
-        self.db.add(cl)
+        periodo = data.get("periodo", "manhã")
+        dia_improdutivo = data.get("dia_improdutivo", False)
+        status_pluv = data.get("status_pluviometrico", "seco_produtivo")
+
+        # Upsert: se já existe registro para este período, atualiza
+        cl = self.db.query(Clima).filter(
+            Clima.obra_id == obra_id,
+            Clima.data == hoje,
+            Clima.periodo == periodo
+        ).first()
+
+        if cl:
+            cl.condicao = data.get("condicao") or cl.condicao
+            cl.anotacao_rdo = data.get("anotacao_rdo", cl.anotacao_rdo)
+            cl.status_pluviometrico = StatusPluviometrico(status_pluv)
+            cl.temperatura = data.get("temperatura") or cl.temperatura
+            cl.impacto_trabalho = data.get("impacto_trabalho") or cl.impacto_trabalho
+            cl.dia_improdutivo = dia_improdutivo
+            cl.texto_original = texto_original
+        else:
+            cl = Clima(
+                obra_id=obra_id, data=hoje,
+                periodo=periodo,
+                condicao=data.get("condicao"),
+                anotacao_rdo=data.get("anotacao_rdo", "sol"),
+                status_pluviometrico=StatusPluviometrico(status_pluv),
+                temperatura=data.get("temperatura"),
+                impacto_trabalho=data.get("impacto_trabalho"),
+                dia_improdutivo=dia_improdutivo,
+                texto_original=texto_original
+            )
+            self.db.add(cl)
+
         self.db.commit()
+
+        # Herança de status para período seguinte se for improdutivo e tarde ainda vazia
+        if dia_improdutivo and periodo == "manhã":
+            self._herdar_status_tarde(obra_id, hoje, cl)
 
         # Relation Engine: dia improdutivo?
         result = self.relations.processar_clima_improdutivo(cl)
 
-        resp = f"✅ Clima ({cl.periodo or 'geral'}): {cl.condicao or 'registrado'}"
+        resp = f"✅ Clima ({cl.periodo}): {cl.condicao or 'registrado'} — {cl.status_pluviometrico.value.replace('_', ' ')}"
         if result and result.get("dia_improdutivo"):
-            resp += f"\n⚠️ Dia improdutivo — {result['atividades_impactadas']} atividade(s) com atraso atualizado"
+            resp += f"\n⚠️ Dia improdutivo — {result['atividades_impactadas']} atividade(s) impactada(s)"
         return resp
+
+    def _herdar_status_tarde(self, obra_id: int, data, clima_manha: Clima):
+        """Se manhã foi improdutiva e tarde não tem registro, cria herança."""
+        existe_tarde = self.db.query(Clima).filter(
+            Clima.obra_id == obra_id,
+            Clima.data == data,
+            Clima.periodo == "tarde"
+        ).first()
+        if not existe_tarde:
+            tarde = Clima(
+                obra_id=obra_id, data=data,
+                periodo="tarde",
+                condicao=clima_manha.condicao,
+                anotacao_rdo=clima_manha.anotacao_rdo,
+                status_pluviometrico=clima_manha.status_pluviometrico,
+                dia_improdutivo=clima_manha.dia_improdutivo,
+                texto_original="[herdado da manhã — confirmar]"
+            )
+            self.db.add(tarde)
+            self.db.commit()
 
     def _registrar_anotacao(self, data, obra_id, registrado_por, texto_original, hoje):
         anot = Anotacao(
@@ -359,6 +468,8 @@ class Orchestrator:
             return self._registrar_equipamento(data, obra_id, registrado_por, texto_original, hoje)
         elif intent == "clima":
             return self._registrar_clima(data, obra_id, texto_original, hoje)
+        elif intent == "expediente":
+            return self._registrar_expediente(data, obra_id, registrado_por, texto_original, hoje)
         elif intent == "anotacao":
             return self._registrar_anotacao(data, obra_id, registrado_por, texto_original, hoje)
         else:

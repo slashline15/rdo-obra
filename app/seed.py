@@ -5,8 +5,9 @@ Roda com: python -m app.seed
 from datetime import date, timedelta
 from app.database import SessionLocal, init_db
 from app.models import (
-    Empresa, Obra, Usuario, Atividade, Efetivo,
-    Anotacao, Material, Equipamento, Clima, AtividadeStatus
+    Empresa, Obra, Usuario, Atividade, AtividadeHistorico, Efetivo,
+    Anotacao, Material, Equipamento, Clima, DiaImprodutivo, Foto,
+    Expediente, AtividadeStatus, TipoEfetivo, StatusPluviometrico
 )
 
 
@@ -14,8 +15,8 @@ def seed():
     init_db()
     db = SessionLocal()
 
-    # Limpar
-    for model in [Anotacao, Clima, Equipamento, Material, Efetivo, Atividade, Usuario, Obra, Empresa]:
+    # Limpar — ordem respeita FKs (dependentes primeiro)
+    for model in [AtividadeHistorico, DiaImprodutivo, Foto, Anotacao, Clima, Expediente, Equipamento, Material, Efetivo, Atividade, Usuario, Obra, Empresa]:
         db.query(model).delete()
     db.commit()
 
@@ -38,7 +39,9 @@ def seed():
         responsavel="Eng. Daniel Silva",
         data_inicio=date(2026, 1, 15),
         data_fim_prevista=date(2027, 6, 30),
-        status="ativa"
+        status="ativa",
+        hora_inicio_padrao="07:00",
+        hora_termino_padrao="17:00",
     )
     db.add(obra)
     db.commit()
@@ -91,21 +94,32 @@ def seed():
 
     # Clima
     climas = [
-        Clima(obra_id=obra.id, data=hoje, periodo="manhã", condicao="sol", temperatura=32.0),
+        Clima(obra_id=obra.id, data=hoje, periodo="manhã", condicao="sol", temperatura=32.0,
+              anotacao_rdo="sol", status_pluviometrico=StatusPluviometrico.SECO_PRODUTIVO),
         Clima(obra_id=obra.id, data=hoje, periodo="tarde", condicao="nublado", temperatura=28.0,
+              anotacao_rdo="chuva", status_pluviometrico=StatusPluviometrico.CHUVA_PRODUTIVA,
               impacto_trabalho="Chuva rápida às 14h, pausa de 30min"),
     ]
     db.add_all(climas)
 
-    # Efetivo
+    # Efetivo — própria empresa (cargos padronizados)
     efetivos = [
-        Efetivo(obra_id=obra.id, data=hoje, funcao="Pedreiro", quantidade=8, empresa="própria", registrado_por="Carlos Encarregado"),
-        Efetivo(obra_id=obra.id, data=hoje, funcao="Servente", quantidade=4, empresa="própria", registrado_por="Carlos Encarregado"),
-        Efetivo(obra_id=obra.id, data=hoje, funcao="Eletricista", quantidade=2, empresa="Elétrica Norte", registrado_por="Carlos Encarregado"),
-        Efetivo(obra_id=obra.id, data=hoje, funcao="Armador", quantidade=3, empresa="própria", registrado_por="Carlos Encarregado"),
-        Efetivo(obra_id=obra.id, data=hoje, funcao="Carpinteiro", quantidade=2, empresa="própria", registrado_por="Carlos Encarregado"),
+        Efetivo(obra_id=obra.id, data=hoje, tipo=TipoEfetivo.PROPRIO, funcao="Pedreiro", quantidade=8, registrado_por="Carlos Encarregado"),
+        Efetivo(obra_id=obra.id, data=hoje, tipo=TipoEfetivo.PROPRIO, funcao="Servente", quantidade=4, registrado_por="Carlos Encarregado"),
+        Efetivo(obra_id=obra.id, data=hoje, tipo=TipoEfetivo.PROPRIO, funcao="Armador", quantidade=3, registrado_por="Carlos Encarregado"),
+        Efetivo(obra_id=obra.id, data=hoje, tipo=TipoEfetivo.PROPRIO, funcao="Carpinteiro", quantidade=2, registrado_por="Carlos Encarregado"),
+        # Empreiteiras (total por empresa)
+        Efetivo(obra_id=obra.id, data=hoje, tipo=TipoEfetivo.EMPREITEIRO, empresa="Elétrica Norte", quantidade=2, registrado_por="Carlos Encarregado"),
     ]
     db.add_all(efetivos)
+
+    # Expediente do dia (mesmo que o padrão — apenas para ter dado no seed)
+    expediente = Expediente(
+        obra_id=obra.id, data=hoje,
+        hora_inicio="07:00", hora_termino="17:00",
+        registrado_por="Carlos Encarregado"
+    )
+    db.add(expediente)
 
     # Materiais
     materiais = [

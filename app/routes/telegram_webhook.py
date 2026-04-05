@@ -64,7 +64,7 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
                 db.commit()
                 await adapter.send_message_raw(
                     chat_id,
-                    f"✅ Vinculado como <b>{user.nome}</b> ({user.funcao}).\n"
+                    f"✅ Vinculado como <b>{user.nome}</b> ({user.role}).\n"
                     f"Pode começar a registrar!"
                 )
             else:

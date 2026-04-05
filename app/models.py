@@ -27,6 +27,14 @@ class MovimentacaoTipo(str, enum.Enum):
     SAIDA = "saída"
 
 
+class StatusPluviometrico(str, enum.Enum):
+    SECO_PRODUTIVO = "seco_produtivo"
+    SECO_IMPRODUTIVO = "seco_improdutivo"
+    CHUVA_PRODUTIVA = "chuva_produtiva"
+    CHUVA_IMPRODUTIVA = "chuva_improdutiva"
+    SEM_EXPEDIENTE = "sem_expediente"
+
+
 class AnotacaoTipo(str, enum.Enum):
     OBSERVACAO = "observação"
     OCORRENCIA = "ocorrência"
@@ -40,6 +48,11 @@ class Prioridade(str, enum.Enum):
     NORMAL = "normal"
     ALTA = "alta"
     URGENTE = "urgente"
+
+
+class TipoEfetivo(str, enum.Enum):
+    PROPRIO = "proprio"        # mão de obra da própria empresa
+    EMPREITEIRO = "empreiteiro"  # empresa terceirizada
 
 
 # === Empresa ===
@@ -70,6 +83,11 @@ class Obra(Base):
     data_fim_prevista = Column(Date)
     status = Column(String(20), default="ativa")
     config = Column(JSON, default={})  # configurações específicas da obra
+
+    # Horário padrão do expediente (HH:MM) — override diário via Expediente
+    hora_inicio_padrao = Column(String(5), default="07:00")
+    hora_termino_padrao = Column(String(5), default="17:00")
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     empresa = relationship("Empresa", back_populates="obras")
@@ -82,6 +100,7 @@ class Obra(Base):
     climas = relationship("Clima", back_populates="obra")
     fotos = relationship("Foto", back_populates="obra")
     dias_improdutivos = relationship("DiaImprodutivo", back_populates="obra")
+    expedientes = relationship("Expediente", back_populates="obra")
 
 
 # === Usuário ===
@@ -188,16 +207,57 @@ class DiaImprodutivo(Base):
     )
 
 
+# === Expediente ===
+# Override diário dos horários padrão da obra.
+# Se não existir registro para o dia, usa obra.hora_inicio_padrao / hora_termino_padrao.
+class Expediente(Base):
+    __tablename__ = "expediente"
+
+    id = Column(Integer, primary_key=True, index=True)
+    obra_id = Column(Integer, ForeignKey("obras.id"), nullable=False)
+    data = Column(Date, nullable=False)
+    hora_inicio = Column(String(5), nullable=False)   # HH:MM
+    hora_termino = Column(String(5), nullable=False)  # HH:MM
+    motivo = Column(Text)  # ex: "concretagem estendida", "recuperar atraso"
+    registrado_por = Column(String(255))
+    texto_original = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    obra = relationship("Obra", back_populates="expedientes")
+
+    __table_args__ = (
+        UniqueConstraint("obra_id", "data", name="uq_expediente_dia"),
+    )
+
+
 # === Efetivo ===
+# Dividido em dois grupos:
+#   proprio     → cargos padronizados da empresa, basta informar funcao + quantidade
+#   empreiteiro → empresa terceirizada + total de funcionários
+#
+# No RDO:
+#   Total empresa   = sum(proprio)
+#   Total empreiteiras = sum(empreiteiro, group_by empresa)
+#   Total geral     = total empresa + total empreiteiras  ← efetivo oficial
 class Efetivo(Base):
     __tablename__ = "efetivo"
 
     id = Column(Integer, primary_key=True, index=True)
     obra_id = Column(Integer, ForeignKey("obras.id"), nullable=False)
     data = Column(Date, default=date.today)
-    funcao = Column(String(100), nullable=False)
+
+    tipo = Column(
+        SAEnum(TipoEfetivo, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+        default=TipoEfetivo.PROPRIO
+    )
+
+    # Próprio: funcao obrigatória (pedreiro, servente, etc.)
+    # Empreiteiro: funcao pode ser omitida (só conta o total por empresa)
+    funcao = Column(String(100))
     quantidade = Column(Integer, nullable=False)
-    empresa = Column(String(255), default="própria")
+    empresa = Column(String(255))  # null = própria empresa
+
     observacoes = Column(Text)
     registrado_por = Column(String(255))
     texto_original = Column(Text)
@@ -279,22 +339,40 @@ class Equipamento(Base):
 
 # === Clima ===
 # RELAÇÃO: se impacto_trabalho indica parada → gera DiaImprodutivo
+# Um registro por período (manhã/tarde/noite) por dia.
+# status_pluviometrico alimenta o gráfico de disco do RDO.
 class Clima(Base):
     __tablename__ = "clima"
 
     id = Column(Integer, primary_key=True, index=True)
     obra_id = Column(Integer, ForeignKey("obras.id"), nullable=False)
     data = Column(Date, default=date.today)
-    periodo = Column(String(10))  # manhã, tarde, noite
+    periodo = Column(String(10), nullable=False, default="manhã")  # manhã | tarde | noite
+
+    # Condição atmosférica detalhada
     condicao = Column(String(20))  # sol, nublado, chuva, chuvoso, tempestade
+
+    # Anotação simplificada para o RDO (cabeçalho do relatório)
+    anotacao_rdo = Column(String(5), default="sol")  # sol | chuva
+
+    # Status para o gráfico pluviométrico (disco mensal)
+    status_pluviometrico = Column(
+        SAEnum(StatusPluviometrico, values_callable=lambda x: [e.value for e in x]),
+        default=StatusPluviometrico.SECO_PRODUTIVO
+    )
+
     temperatura = Column(Float)
-    impacto_trabalho = Column(Text)
-    dia_improdutivo = Column(Boolean, default=False)  # flag: este clima impediu trabalho?
+    impacto_trabalho = Column(Text)   # descrição livre do impacto
+    dia_improdutivo = Column(Boolean, default=False)  # flag legado — mantido por compatibilidade
     observacoes = Column(Text)
     texto_original = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     obra = relationship("Obra", back_populates="climas")
+
+    __table_args__ = (
+        UniqueConstraint("obra_id", "data", "periodo", name="uq_clima_periodo"),
+    )
 
 
 # === Foto ===

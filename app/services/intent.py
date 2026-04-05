@@ -4,7 +4,7 @@ Inclui pré-filtro por palavras-chave para casos óbvios.
 """
 import json
 import re
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 import httpx
@@ -27,6 +27,15 @@ KEYWORD_PATTERNS = {
         r"\b(chegou|chegaram|vieram|veio|presente|efetivo)\b.*\b\d+\b",
         r"\b\d+\b.*\b(chegou|chegaram|vieram|presente)\b",
         r"\b(mão de obra|equipe|turma|pessoal)\b",
+        r"\b\d+\s*(funcionário|trabalhador|homem|operário|pessoa)\b",
+        r"\bda empreiteira\b|\bda empresa\b|\bdo pessoal\b",
+    ],
+    "expediente": [
+        r"\b(começa(mos|r)?|inicia(mos|r)?|entrada)\b.*\b(\d{1,2})[h:]\b",
+        r"\b(termina(mos|r)?|encerra(mos|r)?|saída|fim do expediente)\b.*\b(\d{1,2})[h:]\b",
+        r"\bestend(emos|er)\b.*\b(\d{1,2})[h:]\b",
+        r"\bhorário\b.*\b\d{1,2}[h:]\b",
+        r"\brecuperando\s+atraso\b",
     ],
     "atividade": [
         r"\b(começamos|iniciamos|iniciou|começou|partimos|arrancamos)\b",
@@ -92,11 +101,12 @@ Analise a mensagem do trabalhador e classifique em UMA categoria, extraindo dado
 CATEGORIAS VÁLIDAS (use exatamente estes nomes):
 - atividade → início de serviço/atividade nova
 - conclusao → atividade em andamento sendo finalizada
-- efetivo → mão de obra presente no dia
+- efetivo → mão de obra presente no dia (própria ou empreiteira)
 - material → entrada, saída ou falta de material
 - equipamento → entrada, saída ou uso de equipamento/máquina
 - clima → condição do tempo e impacto no trabalho
 - anotacao → observação geral, ocorrência, pendência
+- expediente → horário de início e/ou término do dia de trabalho
 - foto → registro fotográfico
 - consulta → pergunta sobre dados já registrados
 
@@ -105,8 +115,17 @@ RESPONDA APENAS com JSON neste formato exato:
 
 EXEMPLOS:
 
-Mensagem: "chegaram 5 pedreiros e 3 serventes da empreiteira Silva"
-{"intent": "efetivo", "confidence": 0.95, "data": {"registros": [{"funcao": "pedreiro", "quantidade": 5, "empresa": "Silva"}, {"funcao": "servente", "quantidade": 3, "empresa": "Silva"}]}}
+Mensagem: "hoje temos 8 pedreiros e 4 serventes"
+{"intent": "efetivo", "confidence": 0.95, "data": {"registros": [{"tipo": "proprio", "funcao": "pedreiro", "quantidade": 8}, {"tipo": "proprio", "funcao": "servente", "quantidade": 4}]}}
+
+Mensagem: "chegaram 5 pedreiros e 3 serventes da empreiteira Silva e 12 da Elétrica Norte"
+{"intent": "efetivo", "confidence": 0.95, "data": {"registros": [{"tipo": "proprio", "funcao": "pedreiro", "quantidade": 5}, {"tipo": "proprio", "funcao": "servente", "quantidade": 3}, {"tipo": "empreiteiro", "empresa": "Elétrica Norte", "quantidade": 12}]}}
+
+Mensagem: "15 funcionários da Supermix hoje na obra"
+{"intent": "efetivo", "confidence": 0.92, "data": {"registros": [{"tipo": "empreiteiro", "empresa": "Supermix", "quantidade": 15}]}}
+
+Mensagem: "hoje começamos às 7h e vamos até 18h por conta da concretagem"
+{"intent": "expediente", "confidence": 0.95, "data": {"hora_inicio": "07:00", "hora_termino": "18:00", "motivo": "concretagem estendida"}}
 
 Mensagem: "chuva forte a manhã toda, paramos tudo até meio dia"
 {"intent": "clima", "confidence": 0.95, "data": {"periodo": "manhã", "condicao": "chuva", "impacto_trabalho": "paralisação total até meio dia", "dia_improdutivo": true}}
@@ -123,7 +142,8 @@ Mensagem: "chegaram 200 sacos de cimento, NF 4521"
 REGRAS:
 - Para atividade: reescreva a descrição em linguagem técnica de engenharia civil
 - Para clima: se impediu trabalho, dia_improdutivo = true
-- Para efetivo: sempre use "registros" como array, mesmo com um só registro
+- Para efetivo: sempre use "registros" como array; tipo="proprio" para cargos da empresa, tipo="empreiteiro" para terceiros (nesse caso empresa é obrigatória, funcao pode ser omitida)
+- Para expediente: hora no formato HH:MM (ex: 7h → "07:00"); inclua motivo se mencionado
 - Omita campos não mencionados na mensagem
 - NÃO use "categoria" como valor de intent — use o nome real da categoria
 - confidence deve refletir sua certeza real (0.0 a 1.0)
@@ -173,7 +193,85 @@ async def classify_intent(text: str, obra_id: Optional[int] = None) -> dict:
     if obra_id:
         llm_result.setdefault("data", {})["obra_id"] = obra_id
 
+    # Pós-processamento de clima: enriquecer com período e status pluviométrico
+    if llm_result.get("intent") == "clima":
+        _enrich_clima_data(llm_result.setdefault("data", {}), text)
+
     return llm_result
+
+
+# ─── Enriquecimento de clima ──────────────────────────────────────────
+
+_PERIODO_PATTERNS = [
+    (r"\bmanhã\b|\bcedo\b|\bamanhecer\b|\bmadrugada\b", "manhã"),
+    (r"\btarde\b|\bmei[o-]dia\b|\balmoço\b|\bpós-almoço\b", "tarde"),
+    (r"\bnoite\b|\banoitecer\b|\bentardecer\b", "noite"),
+]
+
+_CHUVA_TERMS = r"chuv[ao]|chuvoso|chovendo|temporal|tempestade|garoa|trovoada|precipitação"
+_IMPRODUTIVO_TERMS = r"parou|paramos|paralisou|paralisamos|parad[ao]|improdutiv|interromp|suspens|aguardando|sem condição|inviável|falta de|sem material|sem cinto|aguard"
+
+
+def _detectar_periodo(text: str) -> str:
+    """Extrai período da mensagem ou infere pelo horário atual."""
+    text_lower = text.lower()
+    for pattern, periodo in _PERIODO_PATTERNS:
+        if re.search(pattern, text_lower):
+            return periodo
+    # Fallback: horário atual
+    hora = datetime.now().hour
+    if hora < 12:
+        return "manhã"
+    elif hora < 18:
+        return "tarde"
+    return "noite"
+
+
+def _inferir_status_pluviometrico(text: str, condicao: str, improdutivo: bool) -> str:
+    """
+    Infere status para o gráfico pluviométrico a partir do texto e dados extraídos.
+    Regras:
+    - sem_expediente: menção explícita
+    - chuva_improdutiva: chuva + parou
+    - chuva_produtiva: chuva + continuou (sem menção de parada)
+    - seco_improdutivo: sem chuva + parou por outro motivo
+    - seco_produtivo: padrão
+    """
+    text_lower = text.lower()
+
+    if re.search(r"\bsem expediente\b|\bferiado\b|\bdomingo\b|\bsábado sem\b|\bfolga\b", text_lower):
+        return "sem_expediente"
+
+    tem_chuva = bool(re.search(_CHUVA_TERMS, text_lower)) or (condicao or "").lower() in ("chuva", "chuvoso", "tempestade", "garoa")
+    tem_parada = improdutivo or bool(re.search(_IMPRODUTIVO_TERMS, text_lower))
+
+    if tem_chuva and tem_parada:
+        return "chuva_improdutiva"
+    if tem_chuva and not tem_parada:
+        return "chuva_produtiva"
+    if not tem_chuva and tem_parada:
+        return "seco_improdutivo"
+    return "seco_produtivo"
+
+
+def _enrich_clima_data(data: dict, text: str):
+    """Enriquece data de clima com período, anotacao_rdo e status_pluviometrico."""
+    # Período
+    if not data.get("periodo"):
+        data["periodo"] = _detectar_periodo(text)
+
+    # Anotação RDO simplificada
+    condicao = data.get("condicao", "")
+    if re.search(_CHUVA_TERMS, condicao.lower()) or re.search(_CHUVA_TERMS, text.lower()):
+        data["anotacao_rdo"] = "chuva"
+    else:
+        data["anotacao_rdo"] = "sol"
+
+    # Status pluviométrico
+    if not data.get("status_pluviometrico"):
+        data["status_pluviometrico"] = _inferir_status_pluviometrico(
+            text, condicao, data.get("dia_improdutivo", False)
+        )
 
 
 async def _call_ollama(text: str, hint: Optional[str] = None) -> dict:

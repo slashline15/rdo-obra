@@ -46,6 +46,24 @@ app.include_router(whatsapp_webhook.router)
 @app.on_event("startup")
 def startup():
     init_db()
+    _check_required_settings()
+
+
+def _check_required_settings():
+    import logging
+    log = logging.getLogger("rdo.startup")
+    warns = []
+
+    if not settings.telegram_bot_token:
+        warns.append("TELEGRAM_BOT_TOKEN não configurado — bot Telegram inativo")
+    if not (settings.whisper_api_key or settings.openai_api_key):
+        warns.append("OPENAI_API_KEY / WHISPER_API_KEY não configurados — transcrição de áudio inativa")
+
+    for w in warns:
+        log.warning("⚠️  %s", w)
+
+    if not warns:
+        log.info("✅ Configuração OK")
 
 
 @app.get("/")
