@@ -83,6 +83,7 @@ class Obra(Base):
     data_fim_prevista = Column(Date)
     status = Column(String(20), default="ativa")
     config = Column(JSON, default={})  # configurações específicas da obra
+    usuario_admin = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
 
     # Horário padrão do expediente (HH:MM) — override diário via Expediente
     hora_inicio_padrao = Column(String(5), default="07:00")
@@ -91,6 +92,7 @@ class Obra(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     empresa = relationship("Empresa", back_populates="obras")
+    admin = relationship("Usuario", foreign_keys=[usuario_admin])
     usuarios = relationship("Usuario", back_populates="obra")
     atividades = relationship("Atividade", back_populates="obra")
     efetivo = relationship("Efetivo", back_populates="obra")

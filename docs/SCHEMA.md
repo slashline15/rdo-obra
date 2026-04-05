@@ -47,6 +47,7 @@ Empresa
 | status | String | `ativa`, `pausada`, `concluida` |
 | hora_inicio_padrao | String(5) | horário padrão ex: `"07:00"` |
 | hora_termino_padrao | String(5) | horário padrão ex: `"17:00"` |
+| usuario_admin | FK -> usuarios.id | responsável técnico que aprova novos cadastros no bot |
 | config | JSON | configurações específicas |
 
 ---
