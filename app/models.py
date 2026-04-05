@@ -93,7 +93,7 @@ class Obra(Base):
 
     empresa = relationship("Empresa", back_populates="obras")
     admin = relationship("Usuario", foreign_keys=[usuario_admin])
-    usuarios = relationship("Usuario", back_populates="obra")
+    usuarios = relationship("Usuario", back_populates="obra", foreign_keys="Usuario.obra_id")
     atividades = relationship("Atividade", back_populates="obra")
     efetivo = relationship("Efetivo", back_populates="obra")
     anotacoes = relationship("Anotacao", back_populates="obra")
@@ -103,6 +103,7 @@ class Obra(Base):
     fotos = relationship("Foto", back_populates="obra")
     dias_improdutivos = relationship("DiaImprodutivo", back_populates="obra")
     expedientes = relationship("Expediente", back_populates="obra")
+    solicitacoes_cadastro = relationship("SolicitacaoCadastro", back_populates="obra")
 
 
 # === Usuário ===
@@ -119,7 +120,7 @@ class Usuario(Base):
     telegram_chat_id = Column(String(50))  # para envio direto no Telegram
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    obra = relationship("Obra", back_populates="usuarios")
+    obra = relationship("Obra", back_populates="usuarios", foreign_keys=[obra_id])
 
 
 # === Atividade (ex-Serviço) ===
@@ -393,3 +394,20 @@ class Foto(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     obra = relationship("Obra", back_populates="fotos")
+
+
+class SolicitacaoCadastro(Base):
+    __tablename__ = "solicitacoes_cadastro"
+
+    id = Column(Integer, primary_key=True, index=True)
+    obra_id = Column(Integer, ForeignKey("obras.id"), nullable=False)
+    solicitante_chat_id = Column(String(20), nullable=False, index=True)
+    solicitante_nome = Column(String(255))
+    solicitante_username = Column(String(255))
+    status = Column(String(20), nullable=False, default="pendente")  # pendente, aprovado, rejeitado
+    admin_decisor_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
+    observacao = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    obra = relationship("Obra", back_populates="solicitacoes_cadastro")

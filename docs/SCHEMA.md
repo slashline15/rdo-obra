@@ -71,6 +71,24 @@ Registro diário de horários. Se não houver entrada para o dia, usa os padrõe
 
 ---
 
+### `solicitacoes_cadastro`
+Fila de aprovação de novos usuários no bot (Telegram).
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| id | PK | |
+| obra_id | FK | obra alvo da solicitação |
+| solicitante_chat_id | String(20) | chat_id Telegram de quem pediu cadastro |
+| solicitante_nome | String | nome capturado no Telegram |
+| solicitante_username | String | username Telegram (opcional) |
+| status | String | `pendente`, `aprovado`, `rejeitado` |
+| admin_decisor_id | FK -> usuarios.id | admin que aprovou/rejeitou |
+| observacao | Text | contexto de decisão (opcional) |
+| created_at | DateTime | |
+| updated_at | DateTime | |
+
+---
+
 ### `efetivo`
 | Campo | Tipo | Descrição |
 |---|---|---|
