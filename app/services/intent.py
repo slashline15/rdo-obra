@@ -174,7 +174,7 @@ async def classify_intent(text: str, obra_id: Optional[int] = None) -> dict:
             return {"intent": "desconhecido", "confidence": 0, "data": {}}
 
     # Validar: se o LLM retornou "categoria" ou intent inválido, usar keywords
-    valid_intents = {"atividade", "conclusao", "efetivo", "material", "equipamento", "clima", "anotacao", "foto", "consulta"}
+    valid_intents = {"atividade", "conclusao", "efetivo", "material", "equipamento", "clima", "anotacao", "foto", "consulta", "expediente"}
     llm_intent = llm_result.get("intent", "")
 
     if llm_intent not in valid_intents:

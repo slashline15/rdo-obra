@@ -169,6 +169,7 @@ class Orchestrator:
         descricao_busca = data.get("descricao", texto_original)
         atividades = self.db.query(Atividade).filter(
             Atividade.obra_id == obra_id,
+            Atividade.registrado_por == registrado_por,
             Atividade.status.in_([AtividadeStatus.INICIADA, AtividadeStatus.EM_ANDAMENTO])
         ).all()
 
