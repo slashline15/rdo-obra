@@ -64,6 +64,8 @@ media/
 *.m4a
 *.wav
 *.oga
+docs/ideias.md
+docs/assets/
 
 # PDFs gerados
 output/
