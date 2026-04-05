@@ -10,8 +10,10 @@ from jinja2 import Environment, FileSystemLoader
 
 from app.models import (
     Obra, Empresa, Atividade, Efetivo, Anotacao,
-    Material, Equipamento, Clima, Foto, AtividadeStatus
+    Material, Equipamento, Clima, Foto, AtividadeStatus,
+    DiarioDia, DiarioStatus, Expediente
 )
+from app.services.grafico_pluviometrico import gerar_disco_mensal
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./output/rdos")
@@ -70,6 +72,16 @@ def gerar_rdo_data(obra_id: int, data_ref: date, db: Session) -> dict:
 
     total_efetivo = sum(e.quantidade for e in efetivo)
 
+    expediente = db.query(Expediente).filter(
+        Expediente.obra_id == obra_id, Expediente.data == data_ref
+    ).first()
+
+    # Gráfico pluviométrico
+    try:
+        disco_svg = gerar_disco_mensal(obra_id, data_ref.year, data_ref.month, db)
+    except Exception:
+        disco_svg = ""
+
     return {
         "obra": obra,
         "empresa": empresa,
@@ -84,6 +96,8 @@ def gerar_rdo_data(obra_id: int, data_ref: date, db: Session) -> dict:
         "equipamentos": equipamentos,
         "climas": climas,
         "fotos": fotos,
+        "expediente": expediente,
+        "disco_svg": disco_svg,
     }
 
 

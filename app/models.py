@@ -55,6 +55,19 @@ class TipoEfetivo(str, enum.Enum):
     EMPREITEIRO = "empreiteiro"  # empresa terceirizada
 
 
+class DiarioStatus(str, enum.Enum):
+    RASCUNHO = "rascunho"
+    EM_REVISAO = "em_revisao"
+    APROVADO = "aprovado"
+    REABERTO = "reaberto"
+
+
+class AlertaSeveridade(str, enum.Enum):
+    ALTA = "alta"
+    MEDIA = "media"
+    BAIXA = "baixa"
+
+
 # === Empresa ===
 class Empresa(Base):
     __tablename__ = "empresas"
@@ -114,6 +127,8 @@ class Usuario(Base):
     nome = Column(String(255), nullable=False)
     telefone = Column(String(20), unique=True, nullable=False)
     obra_id = Column(Integer, ForeignKey("obras.id"))
+    email = Column(String(255), nullable=True, unique=True)
+    senha_hash = Column(String(255), nullable=True)
     role = Column(String(20), default="estagiario")
     ativo = Column(Boolean, default=True)
     canal_preferido = Column(String(20), default="whatsapp")  # whatsapp, telegram
@@ -411,3 +426,77 @@ class SolicitacaoCadastro(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     obra = relationship("Obra", back_populates="solicitacoes_cadastro")
+
+
+# === Diário do Dia ===
+# Representa um dia de uma obra como unidade revisável/aprovável.
+# Auto-criado como rascunho no primeiro acesso via painel.
+class DiarioDia(Base):
+    __tablename__ = "diarios_dia"
+
+    id = Column(Integer, primary_key=True, index=True)
+    obra_id = Column(Integer, ForeignKey("obras.id"), nullable=False)
+    data = Column(Date, nullable=False)
+    status = Column(
+        SAEnum(DiarioStatus, values_callable=lambda x: [e.value for e in x]),
+        default=DiarioStatus.RASCUNHO
+    )
+    submetido_por_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
+    submetido_em = Column(DateTime, nullable=True)
+    aprovado_por_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
+    aprovado_em = Column(DateTime, nullable=True)
+    observacao_aprovacao = Column(Text, nullable=True)
+    pdf_path = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    obra = relationship("Obra")
+    submetido_por = relationship("Usuario", foreign_keys=[submetido_por_id])
+    aprovado_por = relationship("Usuario", foreign_keys=[aprovado_por_id])
+
+    __table_args__ = (
+        UniqueConstraint("obra_id", "data", name="uq_diario_dia"),
+    )
+
+
+# === Audit Log ===
+# Uma row por campo alterado. Genérico para qualquer entidade.
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    obra_id = Column(Integer, ForeignKey("obras.id"), nullable=False)
+    data_ref = Column(Date, nullable=False)
+    tabela = Column(String(50), nullable=False)
+    registro_id = Column(Integer, nullable=False)
+    campo = Column(String(100), nullable=False)
+    valor_anterior = Column(Text, nullable=True)
+    valor_novo = Column(Text, nullable=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    usuario = relationship("Usuario")
+
+
+# === Alertas ===
+# Alertas materializados pelo alert engine, avaliados lazy no GET /painel.
+class Alerta(Base):
+    __tablename__ = "alertas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    obra_id = Column(Integer, ForeignKey("obras.id"), nullable=False)
+    data = Column(Date, nullable=False)
+    regra = Column(String(50), nullable=False)
+    severidade = Column(
+        SAEnum(AlertaSeveridade, values_callable=lambda x: [e.value for e in x]),
+        nullable=False
+    )
+    mensagem = Column(Text, nullable=False)
+    resolvido = Column(Boolean, default=False)
+    resolvido_por_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
+    resolvido_em = Column(DateTime, nullable=True)
+    dados_contexto = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    obra = relationship("Obra")
+    resolvido_por = relationship("Usuario")

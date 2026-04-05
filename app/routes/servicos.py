@@ -9,6 +9,10 @@ from datetime import date
 
 from app.database import get_db
 from app.models import Atividade, AtividadeStatus
+from app.schemas import AtividadeUpdate
+from app.core.auth import get_current_user
+from app.core.diary_lock import check_diary_editable
+from app.services.audit import log_changes
 
 from pydantic import BaseModel
 
@@ -124,6 +128,29 @@ def buscar_atividade(atividade_id: int, db: Session = Depends(get_db)):
     ativ = db.query(Atividade).filter(Atividade.id == atividade_id).first()
     if not ativ:
         raise HTTPException(status_code=404, detail="Atividade não encontrada")
+    return ativ
+
+
+@router.put("/{atividade_id}", response_model=AtividadeResponse)
+def atualizar_atividade(atividade_id: int, dados: AtividadeUpdate, db: Session = Depends(get_db),
+                        current_user=Depends(get_current_user)):
+    ativ = db.query(Atividade).filter(Atividade.id == atividade_id).first()
+    if not ativ:
+        raise HTTPException(status_code=404, detail="Atividade não encontrada")
+    check_diary_editable(db, ativ.obra_id, ativ.data_inicio)
+    updates = dados.model_dump(exclude_unset=True)
+    # Converter status string para enum
+    if "status" in updates and isinstance(updates["status"], str):
+        updates["status"] = AtividadeStatus(updates["status"])
+    old = {k: getattr(ativ, k) for k in updates}
+    # Serializar enums para string antes de logar
+    old_str = {k: (v.value if hasattr(v, 'value') else v) for k, v in old.items()}
+    new_str = {k: (v.value if hasattr(v, 'value') else v) for k, v in updates.items()}
+    log_changes(db, ativ.obra_id, ativ.data_inicio, "atividades", ativ.id, old_str, new_str, current_user.id)
+    for key, value in updates.items():
+        setattr(ativ, key, value)
+    db.commit()
+    db.refresh(ativ)
     return ativ
 
 

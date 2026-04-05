@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from datetime import date
 
 from app.database import get_db
+from app.core.auth import get_current_user
+from app.models import DiarioDia, DiarioStatus, Usuario
 from app.schemas import RDORequest
 from app.services.rdo_generator import gerar_rdo_pdf, gerar_rdo_data, gerar_rdo_html
 
@@ -12,7 +14,20 @@ router = APIRouter(prefix="/rdo", tags=["RDO - Relatório"])
 
 
 @router.post("/gerar")
-def gerar_rdo(request: RDORequest, db: Session = Depends(get_db)):
+def gerar_rdo(request: RDORequest, db: Session = Depends(get_db),
+              current_user: Usuario = Depends(get_current_user)):
+    # Verificar se diário está aprovado (para PDF)
+    if request.formato != "json":
+        diario = db.query(DiarioDia).filter(
+            DiarioDia.obra_id == request.obra_id,
+            DiarioDia.data == request.data,
+        ).first()
+        if not diario or diario.status != DiarioStatus.APROVADO:
+            raise HTTPException(
+                status_code=403,
+                detail="PDF só pode ser gerado após aprovação do diário."
+            )
+
     try:
         if request.formato == "json":
             data = gerar_rdo_data(request.obra_id, request.data, db)
@@ -31,6 +46,11 @@ def gerar_rdo(request: RDORequest, db: Session = Depends(get_db)):
             }
 
         filepath = gerar_rdo_pdf(request.obra_id, request.data, db)
+
+        # Salvar path no diário
+        diario.pdf_path = filepath
+        db.commit()
+
         return FileResponse(filepath, media_type="application/pdf", filename=filepath.split("/")[-1])
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import date, datetime
-from typing import Optional
+from typing import Optional, List
 
 
 # === Empresa ===
@@ -235,3 +235,116 @@ class RDORequest(BaseModel):
     obra_id: int
     data: date
     formato: Optional[str] = "pdf"  # pdf ou json
+
+
+# === Update schemas (partial — todos os campos Optional) ===
+
+class EfetivoUpdate(BaseModel):
+    funcao: Optional[str] = None
+    quantidade: Optional[int] = None
+    empresa: Optional[str] = None
+    tipo: Optional[str] = None
+    observacoes: Optional[str] = None
+
+class AtividadeUpdate(BaseModel):
+    status: Optional[str] = None
+    percentual_concluido: Optional[float] = None
+    observacoes: Optional[str] = None
+    local: Optional[str] = None
+    etapa: Optional[str] = None
+    descricao: Optional[str] = None
+
+class MaterialUpdate(BaseModel):
+    tipo: Optional[str] = None
+    quantidade: Optional[float] = None
+    unidade: Optional[str] = None
+    data_prevista: Optional[date] = None
+    observacoes: Optional[str] = None
+
+class EquipamentoUpdate(BaseModel):
+    tipo: Optional[str] = None
+    equipamento: Optional[str] = None
+    quantidade: Optional[int] = None
+    horas_trabalhadas: Optional[float] = None
+    operador: Optional[str] = None
+    observacoes: Optional[str] = None
+
+class ClimaUpdate(BaseModel):
+    condicao: Optional[str] = None
+    temperatura: Optional[float] = None
+    impacto_trabalho: Optional[str] = None
+    status_pluviometrico: Optional[str] = None
+    anotacao_rdo: Optional[str] = None
+
+class AnotacaoUpdate(BaseModel):
+    descricao: Optional[str] = None
+    tipo: Optional[str] = None
+    prioridade: Optional[str] = None
+    resolvida: Optional[bool] = None
+
+
+# === Workflow ===
+
+class TransicaoDiario(BaseModel):
+    acao: str  # submeter, aprovar, rejeitar, reabrir
+    observacao: Optional[str] = None
+
+class DiarioDiaResponse(BaseModel):
+    id: int
+    obra_id: int
+    data: date
+    status: str
+    submetido_por_id: Optional[int] = None
+    submetido_em: Optional[datetime] = None
+    aprovado_por_id: Optional[int] = None
+    aprovado_em: Optional[datetime] = None
+    observacao_aprovacao: Optional[str] = None
+    pdf_path: Optional[str] = None
+    class Config:
+        from_attributes = True
+
+
+# === Alertas ===
+
+class AlertaResponse(BaseModel):
+    id: int
+    regra: str
+    severidade: str
+    mensagem: str
+    resolvido: bool
+    dados_contexto: Optional[dict] = None
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+
+# === Audit ===
+
+class AuditLogResponse(BaseModel):
+    id: int
+    tabela: str
+    registro_id: int
+    campo: str
+    valor_anterior: Optional[str] = None
+    valor_novo: Optional[str] = None
+    usuario_id: int
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+
+# === Dashboard ===
+
+class DashboardKPIs(BaseModel):
+    produtividade_media: float
+    dias_improdutivos: int
+    atividades_atrasadas: int
+    tempo_medio_aprovacao_horas: float
+    total_efetivo_periodo: int
+    materiais_pendentes: int
+
+class InsightResponse(BaseModel):
+    texto: str
+    severidade: str  # info, atencao, critico
+    data_ref: Optional[date] = None
+    evidencia: str

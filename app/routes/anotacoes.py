@@ -5,7 +5,10 @@ from datetime import date
 
 from app.database import get_db
 from app.models import Anotacao
-from app.schemas import AnotacaoCreate, AnotacaoResponse
+from app.schemas import AnotacaoCreate, AnotacaoResponse, AnotacaoUpdate
+from app.core.auth import get_current_user
+from app.core.diary_lock import check_diary_editable
+from app.services.audit import log_changes
 
 router = APIRouter(prefix="/anotacoes", tags=["Anotações"])
 
@@ -43,13 +46,17 @@ def buscar_anotacao(anotacao_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{anotacao_id}", response_model=AnotacaoResponse)
-def atualizar_anotacao(anotacao_id: int, dados: AnotacaoCreate, db: Session = Depends(get_db)):
+def atualizar_anotacao(anotacao_id: int, dados: AnotacaoUpdate, db: Session = Depends(get_db),
+                       current_user=Depends(get_current_user)):
     anotacao = db.query(Anotacao).filter(Anotacao.id == anotacao_id).first()
     if not anotacao:
         raise HTTPException(status_code=404, detail="Anotação não encontrada")
-    for key, value in dados.model_dump().items():
-        if value is not None:
-            setattr(anotacao, key, value)
+    check_diary_editable(db, anotacao.obra_id, anotacao.data)
+    updates = dados.model_dump(exclude_unset=True)
+    old = {k: getattr(anotacao, k) for k in updates}
+    log_changes(db, anotacao.obra_id, anotacao.data, "anotacoes", anotacao.id, old, updates, current_user.id)
+    for key, value in updates.items():
+        setattr(anotacao, key, value)
     db.commit()
     db.refresh(anotacao)
     return anotacao

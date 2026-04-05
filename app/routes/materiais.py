@@ -6,7 +6,10 @@ from sqlalchemy import func
 
 from app.database import get_db
 from app.models import Material
-from app.schemas import MaterialCreate, MaterialResponse
+from app.schemas import MaterialCreate, MaterialResponse, MaterialUpdate
+from app.core.auth import get_current_user
+from app.core.diary_lock import check_diary_editable
+from app.services.audit import log_changes
 
 router = APIRouter(prefix="/materiais", tags=["Materiais"])
 
@@ -68,6 +71,23 @@ def buscar_material(material_id: int, db: Session = Depends(get_db)):
     material = db.query(Material).filter(Material.id == material_id).first()
     if not material:
         raise HTTPException(status_code=404, detail="Material não encontrado")
+    return material
+
+
+@router.put("/{material_id}", response_model=MaterialResponse)
+def atualizar_material(material_id: int, dados: MaterialUpdate, db: Session = Depends(get_db),
+                       current_user=Depends(get_current_user)):
+    material = db.query(Material).filter(Material.id == material_id).first()
+    if not material:
+        raise HTTPException(status_code=404, detail="Material não encontrado")
+    check_diary_editable(db, material.obra_id, material.data)
+    updates = dados.model_dump(exclude_unset=True)
+    old = {k: getattr(material, k) for k in updates}
+    log_changes(db, material.obra_id, material.data, "materiais", material.id, old, updates, current_user.id)
+    for key, value in updates.items():
+        setattr(material, key, value)
+    db.commit()
+    db.refresh(material)
     return material
 
 

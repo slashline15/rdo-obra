@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     upload_dir: str = "./uploads"
     output_dir: str = "./output"
 
+    # JWT Auth
+    jwt_secret: str = "rdo-digital-secret-change-in-production"
+
     # App
     app_name: str = "RDO Digital"
     app_version: str = "0.2.0"
