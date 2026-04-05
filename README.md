@@ -175,6 +175,8 @@ curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
 
 Ver `docs/ISSUES.md` para pendências técnicas detalhadas.
 
+Para uma leitura técnica orientada a produto (em linguagem acessível), veja `docs/REVISAO_COMPLETA_MVP.md`.
+
 ---
 
 ## Contribuindo
