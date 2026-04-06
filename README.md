@@ -1,6 +1,6 @@
-# RDO Digital — Diário de Obra por Voz
+# RDO Digital — Diário de Obra por Voz e Painel Web
 
-Sistema de registro de Relatório Diário de Obra (RDO) via mensagens de voz no WhatsApp/Telegram. O trabalhador fala no canteiro, o sistema transcreve, classifica a intenção com LLM local, registra no banco e gera PDF ao fim do dia.
+Sistema de registro de Relatório Diário de Obra (RDO) com backend FastAPI, painel web em React e integrações por mensagem. O projeto já possui fluxo web funcional para dashboard, diário da obra, workflow de aprovação e exportação HTML/PDF.
 
 ---
 
@@ -9,6 +9,7 @@ Sistema de registro de Relatório Diário de Obra (RDO) via mensagens de voz no 
 | Componente | Tecnologia |
 |---|---|
 | Backend | FastAPI (Python 3.13) |
+| Frontend | React + Vite + TypeScript |
 | Banco | PostgreSQL + SQLAlchemy |
 | LLM (intent) | Ollama — `qwen2.5:7b-instruct` |
 | Transcrição | OpenAI Whisper API (`whisper-1`) |
@@ -137,13 +138,25 @@ pip install -r requirements.txt
 ### 4. Seed + API
 
 ```bash
-python -m app.seed
+venv/bin/python -m scripts.seed_demo
 uvicorn app.main:app --reload --port 8000
 ```
 
 Swagger em `http://localhost:8000/docs`
 
-### 5. Registrar webhook do Telegram (ngrok)
+Para popular massa retroativa com mais controle, veja [RETRO_SEED_GUIDE.md](/home/lexkaliking/.openclaw/workspace/rdo-obra/docs/RETRO_SEED_GUIDE.md).
+
+### 5. Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+App web em `http://localhost:5173`
+
+### 6. Registrar webhook do Telegram (ngrok)
 
 ```bash
 ngrok http 8000
@@ -158,19 +171,18 @@ curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
 | Módulo | Status |
 |---|---|
 | Models + banco PostgreSQL | Implementado |
-| Seed com dados de teste | Implementado |
+| Seed com dados retroativos e fotos fake | Implementado |
 | Intent classifier (Ollama) | Implementado |
 | Transcription (Whisper API) | Implementado |
 | Orchestrator | Implementado |
 | Relation Engine | Implementado |
 | Adapter Telegram | Implementado |
 | CRUD routes (todas as entidades) | Implementado |
-| Geração RDO (JSON + HTML preview) | Implementado |
+| Geração RDO (HTML preview + PDF) | Implementado |
 | Adapter WhatsApp (Evolution API) | Stub — não funcional |
-| Geração de PDF final | Parcial — não testado |
-| Dashboard web | Não implementado |
-| Autenticação (JWT/token) | Não implementado |
-| Testes automatizados | Não implementado |
+| Dashboard web | Implementado |
+| Autenticação (JWT/token) | Implementado |
+| Testes automatizados | Implementado parcialmente |
 | Deploy (Docker + VPS) | Não implementado |
 
 Ver `docs/ISSUES.md` para pendências técnicas detalhadas.

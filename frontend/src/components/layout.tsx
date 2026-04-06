@@ -1,10 +1,13 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useAuth } from "@/lib/auth";
+import { useAuth } from "@/lib/auth-context";
+import { useTheme } from "@/lib/theme-context";
 import {
   ClipboardList,
   BarChart3,
   LogOut,
   HardHat,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ReactNode } from "react";
@@ -16,6 +19,7 @@ const NAV_ITEMS = [
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   function handleLogout() {
@@ -26,11 +30,32 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen flex">
       {/* Sidebar */}
-      <aside className="w-60 border-r bg-sidebar text-sidebar-foreground flex flex-col">
-        <div className="p-4 border-b">
+      <aside className="w-64 border-r bg-sidebar text-sidebar-foreground flex flex-col">
+        <div className="p-4 border-b space-y-4">
           <div className="flex items-center gap-2">
-            <ClipboardList className="h-5 w-5 text-primary" />
-            <span className="font-bold text-lg">RDO Digital</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/12 text-primary">
+              <ClipboardList className="h-5 w-5" />
+            </div>
+            <div>
+              <span className="block font-bold text-lg leading-none">RDO Digital</span>
+              <span className="text-xs text-muted-foreground">Painel de obra</span>
+            </div>
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-between"
+            onClick={toggleTheme}
+          >
+            <span>{theme === "dark" ? "Tema escuro" : "Tema claro"}</span>
+            {theme === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+          </Button>
+        </div>
+
+        <div className="px-4 pt-4">
+          <div className="rounded-2xl border border-sidebar-border/80 bg-background/50 p-3">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Navegação</p>
           </div>
         </div>
 
@@ -39,7 +64,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             <Link
               key={item.to}
               to={item.to}
-              className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium hover:bg-sidebar-accent transition-colors [&.active]:bg-sidebar-accent [&.active]:text-sidebar-accent-foreground"
+              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-sidebar-accent transition-colors [&.active]:bg-sidebar-accent [&.active]:text-sidebar-accent-foreground"
             >
               <item.icon className="h-4 w-4" />
               {item.label}
@@ -48,7 +73,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="p-3 border-t space-y-2">
-          <div className="px-3 py-1">
+          <div className="rounded-2xl border border-sidebar-border/80 bg-background/50 px-3 py-3">
             <p className="text-sm font-medium truncate">{user?.nome}</p>
             <p className="text-xs text-muted-foreground">{user?.role}</p>
           </div>
@@ -65,7 +90,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto bg-background">
         {children}
       </main>
     </div>

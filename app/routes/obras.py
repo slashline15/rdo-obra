@@ -5,12 +5,24 @@ from typing import List
 from app.database import get_db
 from app.models import Obra
 from app.schemas import ObraCreate, ObraResponse
+from app.core.auth import get_current_user
 
 router = APIRouter(prefix="/obras", tags=["Obras"])
 
 
+def _require_adminish(current_user) -> None:
+    role = "admin" if current_user.role == "responsavel" else current_user.role
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Acesso negado. Necessário: admin")
+
+
 @router.post("/", response_model=ObraResponse)
-def criar_obra(obra: ObraCreate, db: Session = Depends(get_db)):
+def criar_obra(
+    obra: ObraCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _require_adminish(current_user)
     db_obra = Obra(**obra.model_dump())
     db.add(db_obra)
     db.commit()
@@ -19,7 +31,11 @@ def criar_obra(obra: ObraCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/", response_model=List[ObraResponse])
-def listar_obras(status: str = None, db: Session = Depends(get_db)):
+def listar_obras(
+    status: str = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     query = db.query(Obra)
     if status:
         query = query.filter(Obra.status == status)
@@ -27,7 +43,11 @@ def listar_obras(status: str = None, db: Session = Depends(get_db)):
 
 
 @router.get("/{obra_id}", response_model=ObraResponse)
-def buscar_obra(obra_id: int, db: Session = Depends(get_db)):
+def buscar_obra(
+    obra_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     obra = db.query(Obra).filter(Obra.id == obra_id).first()
     if not obra:
         raise HTTPException(status_code=404, detail="Obra não encontrada")
@@ -35,7 +55,13 @@ def buscar_obra(obra_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{obra_id}", response_model=ObraResponse)
-def atualizar_obra(obra_id: int, dados: ObraCreate, db: Session = Depends(get_db)):
+def atualizar_obra(
+    obra_id: int,
+    dados: ObraCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _require_adminish(current_user)
     obra = db.query(Obra).filter(Obra.id == obra_id).first()
     if not obra:
         raise HTTPException(status_code=404, detail="Obra não encontrada")
@@ -47,7 +73,12 @@ def atualizar_obra(obra_id: int, dados: ObraCreate, db: Session = Depends(get_db
 
 
 @router.delete("/{obra_id}")
-def deletar_obra(obra_id: int, db: Session = Depends(get_db)):
+def deletar_obra(
+    obra_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _require_adminish(current_user)
     obra = db.query(Obra).filter(Obra.id == obra_id).first()
     if not obra:
         raise HTTPException(status_code=404, detail="Obra não encontrada")

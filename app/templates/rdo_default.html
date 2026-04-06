@@ -2,394 +2,628 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>RDO - {{ obra.nome }} - {{ data }}</title>
+    <title>RDO - {{ obra.nome }} - {{ data_extenso }}</title>
     <style>
         @page {
             size: A4;
-            margin: 15mm;
+            margin: 8mm;
+        }
+        :root {
+            --ink: #3b3b3b;
+            --line: #555;
+            --paper: #fbfbfa;
+            --panel: #f1f0ec;
+            --title: #4b4b4b;
+            --orange: #e67e22;
+            --blue: #4a90e2;
+            --green: #56a66b;
+            --amber: #c48c2d;
+            --muted: #7c7c7c;
         }
         * {
-            margin: 0;
-            padding: 0;
             box-sizing: border-box;
         }
         body {
-            font-family: 'Helvetica', 'Arial', sans-serif;
-            font-size: 10pt;
-            color: #333;
-            line-height: 1.4;
+            margin: 0;
+            background: {% if modo == "pdf" %}white{% else %}#e9e8e4{% endif %};
+            color: var(--ink);
+            font-family: "Trebuchet MS", "Segoe UI", Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.3;
         }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 3px solid #2c3e50;
-            padding-bottom: 10px;
-            margin-bottom: 15px;
+        .page {
+            width: {% if modo == "pdf" %}100%{% else %}1100px{% endif %};
+            margin: {% if modo == "pdf" %}0 auto{% else %}24px auto{% endif %};
+            background: var(--paper);
+            border: 2px solid var(--line);
+            padding: 0;
         }
-        .header-left {
-            flex: 1;
-        }
-        .header-right {
-            text-align: right;
-        }
-        .logo {
-            max-height: 60px;
-            max-width: 200px;
-        }
-        h1 {
-            font-size: 16pt;
-            color: #2c3e50;
-            margin-bottom: 3px;
-        }
-        h2 {
-            font-size: 12pt;
-            color: #2c3e50;
-            background: #ecf0f1;
-            padding: 5px 10px;
-            margin: 12px 0 8px 0;
-            border-left: 4px solid #3498db;
-        }
-        .info-grid {
+        .row {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 5px 20px;
+            gap: 0;
+            border-bottom: 2px solid var(--line);
+        }
+        .top-row {
+            grid-template-columns: 0.24fr 0.44fr 0.15fr 0.17fr;
+            min-height: 102px;
+        }
+        .mid-row {
+            grid-template-columns: 0.42fr 0.58fr;
+            min-height: 214px;
+        }
+        .cell {
+            border-right: 2px solid var(--line);
+            padding: 10px 12px;
+            position: relative;
+            overflow: hidden;
+        }
+        .cell:last-child {
+            border-right: 0;
+        }
+        .logo-box {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100%;
+            text-align: center;
+        }
+        .logo-fallback {
+            color: var(--orange);
+            font-size: 22px;
+            line-height: 1.2;
+            letter-spacing: 0.04em;
+        }
+        .logo-box img {
+            max-width: 100%;
+            max-height: 76px;
+            object-fit: contain;
+        }
+        .main-title {
+            text-align: center;
+            font-size: 28px;
+            color: var(--title);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
             margin-bottom: 10px;
         }
-        .info-item {
+        .meta-item {
             display: flex;
+            gap: 8px;
+            align-items: flex-start;
+            margin-top: 7px;
+            font-size: 15px;
         }
-        .info-label {
-            font-weight: bold;
-            min-width: 120px;
-            color: #555;
+        .meta-label {
+            font-weight: 700;
+            color: #9f5b43;
+            white-space: nowrap;
+        }
+        .date-box {
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            text-align: center;
+            gap: 6px;
+        }
+        .date-box .date {
+            font-size: 22px;
+            font-weight: 700;
+        }
+        .date-box .weekday {
+            font-size: 10px;
+            color: var(--muted);
+            letter-spacing: 0.08em;
+        }
+        .turnos {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 4px;
+            margin-top: 4px;
+        }
+        .turno {
+            border: 1px solid #777;
+            border-radius: 12px;
+            padding: 2px 4px;
+            font-size: 9px;
+            text-align: center;
+            background: white;
+        }
+        .turno.active {
+            background: #e7e4ff;
+            border-color: #7870cc;
+        }
+        .rdo-box {
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            gap: 8px;
+        }
+        .rdo-code {
+            font-size: 18px;
+            font-weight: 800;
+            text-align: right;
+        }
+        .expediente-label {
+            font-size: 8px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            text-align: right;
+        }
+        .expediente-time {
+            border: 2px solid #9b9b9b;
+            border-radius: 10px;
+            padding: 6px 8px;
+            font-size: 18px;
+            font-weight: 700;
+            text-align: center;
+            background: white;
+        }
+        .panel-title {
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--title);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .panel-title.blue {
+            color: var(--blue);
+        }
+        .panel-box {
+            border: 2px solid #838383;
+            background: #faf9f7;
+            padding: 8px 10px;
+            margin-bottom: 10px;
+        }
+        .panel-box:last-child {
+            margin-bottom: 0;
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 10px;
-            font-size: 9pt;
+        }
+        th, td {
+            border: 1px solid #7f7f7f;
+            padding: 4px 6px;
+            vertical-align: top;
         }
         th {
-            background: #3498db;
-            color: white;
-            padding: 6px 8px;
+            background: #efefef;
             text-align: left;
-            font-weight: 600;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
         td {
-            padding: 5px 8px;
-            border-bottom: 1px solid #ddd;
+            font-size: 11px;
         }
-        tr:nth-child(even) {
-            background: #f8f9fa;
+        .totals-row td {
+            font-size: 11px;
+            font-weight: 800;
+            background: #f8f7f4;
         }
-        .clima-box {
-            display: inline-block;
-            background: #e8f4fd;
-            border: 1px solid #bee5eb;
-            border-radius: 5px;
-            padding: 8px 15px;
-            margin: 3px 5px 3px 0;
+        .section-header {
+            border-bottom: 2px solid var(--line);
+            padding: 12px 18px 10px;
+            font-size: 22px;
+            color: var(--title);
+            text-align: center;
+            font-weight: 700;
         }
-        .clima-periodo {
-            font-weight: bold;
-            text-transform: capitalize;
+        .activity-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1.2fr;
+            border-bottom: 2px solid var(--line);
         }
-        .anotacao-urgente {
-            background: #fff3cd !important;
-            border-left: 3px solid #ffc107;
+        .activity-col {
+            border-right: 2px solid var(--line);
+            padding: 12px 14px;
+            min-height: 206px;
         }
-        .anotacao-alta {
-            background: #f8d7da !important;
-            border-left: 3px solid #dc3545;
+        .activity-col:last-child {
+            border-right: 0;
+        }
+        .activity-heading {
+            font-size: 15px;
+            font-weight: 800;
+            margin-bottom: 10px;
+        }
+        .activity-heading.blue { color: var(--blue); }
+        .activity-heading.orange { color: var(--orange); }
+        .activity-heading.green { color: var(--green); }
+        .activity-heading.amber { color: var(--amber); }
+        .activity-card {
+            margin-bottom: 10px;
+            font-size: 10px;
+        }
+        .activity-card:last-child {
+            margin-bottom: 0;
+        }
+        .activity-card strong {
+            display: block;
+            margin-bottom: 3px;
+            font-size: 11px;
+        }
+        .micro {
+            color: var(--muted);
+            font-size: 9px;
+        }
+        .notes-card {
+            margin-bottom: 10px;
+            padding-left: 10px;
+            border-left: 3px solid #d7d7d7;
+        }
+        .notes-card:last-child {
+            margin-bottom: 0;
+        }
+        .notes-card.priority-alta,
+        .notes-card.priority-urgente {
+            border-left-color: #cf5f58;
+        }
+        .photos-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            padding: 14px 18px 18px;
+            {% if modo == "pdf" %}
+            min-height: 220px;
+            {% endif %}
+        }
+        .photo-card {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .photo-frame {
+            border: 1px solid #8a8a8a;
+            background: #f2f2f2;
+            aspect-ratio: 1.24 / 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .photo-frame img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .photo-empty {
+            color: var(--muted);
+            font-size: 11px;
+            text-align: center;
+            padding: 20px;
+        }
+        .photo-caption {
+            font-size: 10px;
+            color: #565656;
         }
         .footer {
-            margin-top: 30px;
-            border-top: 2px solid #2c3e50;
-            padding-top: 10px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            padding: 26px 28px 18px;
+        }
+        .signature {
+            text-align: center;
+            padding-top: 26px;
+            border-top: 2px solid #666;
+            font-size: 11px;
+        }
+        .web-extra {
+            padding: 18px;
+            border-top: 2px solid var(--line);
+        }
+        .web-extra h3 {
+            margin: 0 0 10px;
+            font-size: 16px;
+            color: var(--title);
+        }
+        .web-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 30px;
+            gap: 14px;
         }
-        .assinatura {
-            text-align: center;
-            padding-top: 40px;
-            border-top: 1px solid #333;
-            margin-top: 10px;
+        .web-card {
+            border: 1px solid #b7b7b7;
+            background: white;
+            padding: 12px;
         }
-        .empty-message {
-            color: #888;
-            font-style: italic;
-            padding: 5px 0;
-        }
-        .badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 8pt;
-            font-weight: bold;
-            color: white;
-        }
-        .badge-entrada { background: #28a745; }
-        .badge-saida { background: #dc3545; }
-        .badge-manutencao { background: #ffc107; color: #333; }
-        .fotos-grid {
+        .list {
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
+            gap: 8px;
         }
-        .foto-item {
-            text-align: center;
+        .list-item {
+            padding-bottom: 8px;
+            border-bottom: 1px dashed #cbcbcb;
         }
-        .foto-item img {
-            max-width: 100%;
-            max-height: 150px;
-            border: 1px solid #ddd;
+        .list-item:last-child {
+            border-bottom: 0;
+            padding-bottom: 0;
         }
-        .foto-caption {
-            font-size: 8pt;
-            color: #666;
-            margin-top: 3px;
+        .empty {
+            color: var(--muted);
+            font-style: italic;
+        }
+        .pdf-only {
+            display: {% if modo == "pdf" %}block{% else %}none{% endif %};
+        }
+        .web-only {
+            display: {% if modo == "web" %}block{% else %}none{% endif %};
         }
     </style>
 </head>
 <body>
-
-    <!-- CABEÇALHO -->
-    <div class="header">
-        <div class="header-left">
-            <h1>RELATÓRIO DIÁRIO DE OBRA</h1>
-            <div style="font-size: 11pt; color: #666;">{{ data.strftime('%d/%m/%Y') }} — {{ ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'][data.weekday()] }}-feira</div>
-        </div>
-        <div class="header-right">
-            {% if empresa and empresa.logo %}
-            <img src="{{ empresa.logo }}" class="logo" alt="{{ empresa.nome }}">
-            {% elif empresa %}
-            <div style="font-size: 14pt; font-weight: bold; color: #2c3e50;">{{ empresa.nome }}</div>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- DADOS DA OBRA -->
-    <div class="info-grid">
-        <div class="info-item">
-            <span class="info-label">Obra:</span>
-            <span>{{ obra.nome }}</span>
-        </div>
-        <div class="info-item">
-            <span class="info-label">Responsável:</span>
-            <span>{{ obra.responsavel or '—' }}</span>
-        </div>
-        <div class="info-item">
-            <span class="info-label">Endereço:</span>
-            <span>{{ obra.endereco or '—' }}</span>
-        </div>
-        <div class="info-item">
-            <span class="info-label">Status:</span>
-            <span>{{ obra.status or 'Ativa' }}</span>
-        </div>
-    </div>
-
-    <!-- CLIMA -->
-    <h2>☀️ Condições Climáticas</h2>
-    {% if climas %}
-    <div>
-        {% for c in climas %}
-        <div class="clima-box">
-            <span class="clima-periodo">{{ c.periodo or 'Geral' }}:</span>
-            {{ c.condicao or '—' }}
-            {% if c.temperatura %} · {{ c.temperatura }}°C{% endif %}
-            {% if c.impacto_trabalho %}<br><small>{{ c.impacto_trabalho }}</small>{% endif %}
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <p class="empty-message">Nenhum registro climático.</p>
-    {% endif %}
-
-    <!-- EFETIVO -->
-    <h2>👷 Efetivo — Total: {{ total_efetivo }} profissionais</h2>
-    {% if efetivo %}
-    <table>
-        <thead>
-            <tr><th>Função</th><th>Qtd</th><th>Empresa</th><th>Observações</th></tr>
-        </thead>
-        <tbody>
-            {% for e in efetivo %}
-            <tr>
-                <td>{{ e.funcao }}</td>
-                <td>{{ e.quantidade }}</td>
-                <td>{{ e.empresa or 'Própria' }}</td>
-                <td>{{ e.observacoes or '—' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="empty-message">Nenhum registro de efetivo.</p>
-    {% endif %}
-
-    <!-- ATIVIDADES INICIADAS -->
-    <h2>🆕 Atividades Iniciadas</h2>
-    {% if iniciadas %}
-    <table>
-        <thead>
-            <tr><th>Descrição</th><th>Local</th><th>Etapa</th></tr>
-        </thead>
-        <tbody>
-            {% for a in iniciadas %}
-            <tr>
-                <td>{{ a.descricao }}</td>
-                <td>{{ a.local or '—' }}</td>
-                <td>{{ a.etapa or '—' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="empty-message">Nenhuma atividade iniciada nesta data.</p>
-    {% endif %}
-
-    <!-- ATIVIDADES EM ANDAMENTO -->
-    <h2>🔧 Atividades em Andamento</h2>
-    {% if em_andamento %}
-    <table>
-        <thead>
-            <tr><th>Descrição</th><th>Local</th><th>Etapa</th><th>Atraso</th></tr>
-        </thead>
-        <tbody>
-            {% for a in em_andamento %}
-            <tr>
-                <td>{{ a.descricao }}</td>
-                <td>{{ a.local or '—' }}</td>
-                <td>{{ a.etapa or '—' }}</td>
-                <td>{{ (a.dias_atraso|string + ' dia(s)') if a.dias_atraso else '—' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="empty-message">Nenhuma atividade em andamento.</p>
-    {% endif %}
-
-    <!-- ATIVIDADES CONCLUÍDAS -->
-    <h2>✅ Atividades Concluídas</h2>
-    {% if concluidas %}
-    <table>
-        <thead>
-            <tr><th>Descrição</th><th>Local</th><th>Etapa</th></tr>
-        </thead>
-        <tbody>
-            {% for a in concluidas %}
-            <tr>
-                <td>{{ a.descricao }}</td>
-                <td>{{ a.local or '—' }}</td>
-                <td>{{ a.etapa or '—' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="empty-message">Nenhuma atividade concluída nesta data.</p>
-    {% endif %}
-
-    <!-- MATERIAIS -->
-    <h2>📦 Materiais</h2>
-    {% if materiais %}
-    <table>
-        <thead>
-            <tr><th>Tipo</th><th>Material</th><th>Qtd</th><th>Unidade</th><th>Fornecedor</th><th>NF</th></tr>
-        </thead>
-        <tbody>
-            {% for m in materiais %}
-            <tr>
-                <td><span class="badge badge-{{ 'entrada' if m.tipo == 'entrada' else 'saida' }}">{{ m.tipo }}</span></td>
-                <td>{{ m.material }}</td>
-                <td>{{ m.quantidade or '—' }}</td>
-                <td>{{ m.unidade or '—' }}</td>
-                <td>{{ m.fornecedor or '—' }}</td>
-                <td>{{ m.nota_fiscal or '—' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="empty-message">Nenhuma movimentação de material.</p>
-    {% endif %}
-
-    <!-- EQUIPAMENTOS -->
-    <h2>🚜 Equipamentos</h2>
-    {% if equipamentos %}
-    <table>
-        <thead>
-            <tr><th>Tipo</th><th>Equipamento</th><th>Qtd</th><th>Horas</th><th>Operador</th><th>Obs</th></tr>
-        </thead>
-        <tbody>
-            {% for eq in equipamentos %}
-            <tr>
-                <td><span class="badge badge-{{ eq.tipo.replace('í','i').replace('ã','a') }}">{{ eq.tipo }}</span></td>
-                <td>{{ eq.equipamento }}</td>
-                <td>{{ eq.quantidade or 1 }}</td>
-                <td>{{ eq.horas_trabalhadas or '—' }}</td>
-                <td>{{ eq.operador or '—' }}</td>
-                <td>{{ eq.observacoes or '—' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="empty-message">Nenhum equipamento registrado.</p>
-    {% endif %}
-
-    <!-- ANOTAÇÕES -->
-    <h2>📝 Anotações e Ocorrências</h2>
-    {% if anotacoes %}
-    <table>
-        <thead>
-            <tr><th>Tipo</th><th>Descrição</th><th>Prioridade</th><th>Registrado por</th></tr>
-        </thead>
-        <tbody>
-            {% for a in anotacoes %}
-            <tr class="{{ 'anotacao-urgente' if a.prioridade == 'urgente' else ('anotacao-alta' if a.prioridade == 'alta' else '') }}">
-                <td>{{ a.tipo }}</td>
-                <td>{{ a.descricao }}</td>
-                <td>{{ a.prioridade }}</td>
-                <td>{{ a.registrado_por or '—' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="empty-message">Nenhuma anotação.</p>
-    {% endif %}
-
-    <!-- FOTOS -->
-    {% if fotos %}
-    <h2>📷 Registro Fotográfico</h2>
-    <div class="fotos-grid">
-        {% for f in fotos %}
-        <div class="foto-item">
-            <img src="{{ f.arquivo }}" alt="{{ f.descricao or 'Foto' }}">
-            <div class="foto-caption">{{ f.descricao or '' }} {% if f.categoria %}({{ f.categoria }}){% endif %}</div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    <!-- ASSINATURAS -->
-    <div class="footer">
-        <div>
-            <div class="assinatura">
-                {{ obra.responsavel or 'Responsável Técnico' }}
+    <main class="page">
+        <section class="row top-row">
+            <div class="cell logo-box">
+                {% if logo_src %}
+                <img src="{{ logo_src }}" alt="{{ empresa.nome if empresa else obra.nome }}">
+                {% elif empresa %}
+                <div class="logo-fallback">{{ empresa.nome }}</div>
+                {% else %}
+                <div class="logo-fallback">LOGO DA<br>EMPRESA</div>
+                {% endif %}
             </div>
-        </div>
-        <div>
-            <div class="assinatura">
-                Fiscal / Contratante
-            </div>
-        </div>
-    </div>
 
+            <div class="cell">
+                <div class="main-title">RELATÓRIO DIÁRIO DE OBRA</div>
+                <div class="meta-item">
+                    <span class="meta-label">OBRA:</span>
+                    <span>{{ obra.nome }}</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">LOCAL:</span>
+                    <span>{{ obra.endereco or "Endereço não informado" }}</span>
+                </div>
+            </div>
+
+            <div class="cell date-box">
+                <div class="date">{{ data_extenso }}</div>
+                <div class="weekday">{{ dia_semana }}</div>
+                <div class="turnos">
+                    <div class="turno {% if clima_turnos.manha %}active{% endif %}">MANHÃ</div>
+                    <div class="turno {% if clima_turnos.tarde %}active{% endif %}">TARDE</div>
+                    <div class="turno {% if clima_turnos.noite %}active{% endif %}">NOITE</div>
+                </div>
+            </div>
+
+            <div class="cell rdo-box">
+                <div class="rdo-code">RDO #{{ report_number }}</div>
+                <div class="expediente-label">EXPEDIENTE</div>
+                <div class="expediente-time">{{ expediente_inicio }} -> {{ expediente_fim }}</div>
+            </div>
+        </section>
+
+        <section class="row mid-row">
+            <div class="cell">
+                <div class="panel-title blue">EFETIVO DA OBRA: {{ total_efetivo }}</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Função</th>
+                            <th>Qtd.</th>
+                            <th>Empresa</th>
+                            <th>Qtd.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% set left = efetivo[:8] %}
+                        {% set right = efetivo[8:16] %}
+                        {% set rows = left|length if left|length > right|length else right|length %}
+                        {% if rows == 0 %}
+                        <tr><td colspan="4" class="empty">Sem efetivo lançado para a data.</td></tr>
+                        {% else %}
+                        {% for idx in range(rows) %}
+                        <tr>
+                            <td>{{ left[idx].funcao if idx < left|length else "—" }}</td>
+                            <td>{{ left[idx].quantidade if idx < left|length else "—" }}</td>
+                            <td>{{ right[idx].empresa if idx < right|length else "—" }}</td>
+                            <td>{{ right[idx].quantidade if idx < right|length else "—" }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% endif %}
+                        <tr class="totals-row">
+                            <td colspan="2">TOTAL HOSS {{ total_proprio }}</td>
+                            <td colspan="2">SUBEMPREITEIROS {{ total_terceiros }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="cell">
+                <div class="panel-box">
+                    <div class="panel-title">Entrada e Saída de Materiais</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Tipo</th>
+                                <th>Material</th>
+                                <th>Qtd.</th>
+                                <th>Und.</th>
+                                <th>Fornecedor</th>
+                                <th>Obs.</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for material in (materiais_entrada + materiais_saida)[:4] %}
+                            <tr>
+                                <td>{{ material.tipo }}</td>
+                                <td>{{ material.material }}</td>
+                                <td>{{ material.quantidade or "—" }}</td>
+                                <td>{{ material.unidade or "—" }}</td>
+                                <td>{{ material.fornecedor or "—" }}</td>
+                                <td>{{ material.observacoes or material.nota_fiscal or "—" }}</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="6" class="empty">Nenhuma movimentação registrada.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="panel-box">
+                    <div class="panel-title">Equipamentos e Maquinário</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Tipo</th>
+                                <th>Equipamento</th>
+                                <th>Qtd.</th>
+                                <th>Horas</th>
+                                <th>Operador</th>
+                                <th>Observações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for equipamento in equipamentos_resumo %}
+                            <tr>
+                                <td>{{ equipamento.tipo }}</td>
+                                <td>{{ equipamento.equipamento }}</td>
+                                <td>{{ equipamento.quantidade or 1 }}</td>
+                                <td>{{ equipamento.horas_trabalhadas or "—" }}</td>
+                                <td>{{ equipamento.operador or "—" }}</td>
+                                <td>{{ equipamento.observacoes or "—" }}</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="6" class="empty">Nenhum equipamento lançado.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="section-header">Registro de Atividades</section>
+
+        <section class="activity-grid">
+            <div class="activity-col">
+                <div class="activity-heading blue">Iniciadas</div>
+                {% for item in atividades_cards.iniciadas %}
+                <div class="activity-card">
+                    <strong>{{ item.titulo }}</strong>
+                    <div>{{ item.descricao }}</div>
+                    <div class="micro">{{ item.local }} · {{ item.etapa }}</div>
+                </div>
+                {% else %}
+                <div class="empty">Nenhuma atividade iniciada na data.</div>
+                {% endfor %}
+            </div>
+
+            <div class="activity-col">
+                <div class="activity-heading orange">Em andamento</div>
+                {% for item in atividades_cards.em_andamento %}
+                <div class="activity-card">
+                    <strong>{{ item.titulo }}</strong>
+                    <div>{{ item.descricao }}</div>
+                    <div class="micro">{{ item.local }} · {{ item.etapa }} · {{ item.progresso }}%</div>
+                </div>
+                {% else %}
+                <div class="empty">Sem frentes em andamento.</div>
+                {% endfor %}
+            </div>
+
+            <div class="activity-col">
+                <div class="activity-heading green">Concluídas</div>
+                {% for item in atividades_cards.concluidas %}
+                <div class="activity-card">
+                    <strong>{{ item.titulo }}</strong>
+                    <div>{{ item.descricao }}</div>
+                    <div class="micro">{{ item.local }} · {{ item.etapa }}</div>
+                </div>
+                {% else %}
+                <div class="empty">Nenhuma conclusão registrada.</div>
+                {% endfor %}
+            </div>
+
+            <div class="activity-col">
+                <div class="activity-heading amber">Anotações e Ocorrências</div>
+                {% for anotacao in anotacoes_cards %}
+                <div class="notes-card {{ anotacao.priority_class }}">
+                    <strong>{{ anotacao.tipo|capitalize }}</strong>
+                    <div>{{ anotacao.descricao }}</div>
+                </div>
+                {% else %}
+                <div class="empty">Nenhuma anotação no período.</div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="photos-row">
+            {% set fotos_exibir = fotos_pdf if modo == "pdf" else fotos_cards %}
+            {% for foto in fotos_exibir[:3] %}
+            <div class="photo-card">
+                <div class="photo-frame">
+                    {% if foto.src %}
+                    <img src="{{ foto.src }}" alt="{{ foto.descricao }}">
+                    {% else %}
+                    <div class="photo-empty">Imagem indisponível</div>
+                    {% endif %}
+                </div>
+                <div class="photo-caption">{{ foto.descricao }}</div>
+            </div>
+            {% else %}
+            <div class="photo-card">
+                <div class="photo-frame"><div class="photo-empty">Sem fotos registradas.</div></div>
+            </div>
+            <div class="photo-card">
+                <div class="photo-frame"><div class="photo-empty">Espaço reservado para foto.</div></div>
+            </div>
+            <div class="photo-card">
+                <div class="photo-frame"><div class="photo-empty">Espaço reservado para foto.</div></div>
+            </div>
+            {% endfor %}
+        </section>
+
+        <section class="footer">
+            <div class="signature">{{ obra.responsavel or "Eng. Responsável" }}</div>
+            <div class="signature">Fiscal da Obra</div>
+            <div class="signature">{{ empresa.nome if empresa else "Construtora" }}</div>
+        </section>
+
+        <section class="web-only web-extra">
+            <h3>Detalhamento Online</h3>
+            <div class="web-grid">
+                <div class="web-card">
+                    <h3>Clima e Expediente</h3>
+                    <div class="list">
+                        <div class="list-item"><strong>Resumo climático:</strong> {{ clima_resumo }}</div>
+                        <div class="list-item"><strong>Expediente:</strong> {{ expediente_inicio }} -> {{ expediente_fim }}</div>
+                        {% for clima in climas %}
+                        <div class="list-item">
+                            <strong>{{ clima.periodo or "turno"|upper }}:</strong>
+                            {{ clima.condicao or "—" }}
+                            {% if clima.temperatura %} · {{ clima.temperatura }}°C{% endif %}
+                            {% if clima.impacto_trabalho %}<br>{{ clima.impacto_trabalho }}{% endif %}
+                        </div>
+                        {% else %}
+                        <div class="list-item empty">Sem registros climáticos.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="web-card">
+                    <h3>Registros Complementares</h3>
+                    <div class="list">
+                        {% for material in materiais %}
+                        <div class="list-item">
+                            <strong>Material:</strong> {{ material.material }} · {{ material.tipo }}
+                            <div>{{ material.quantidade or "—" }} {{ material.unidade or "" }} · {{ material.fornecedor or "Sem fornecedor" }}</div>
+                        </div>
+                        {% else %}
+                        <div class="list-item empty">Sem materiais lançados.</div>
+                        {% endfor %}
+
+                        {% for equipamento in equipamentos %}
+                        <div class="list-item">
+                            <strong>Equipamento:</strong> {{ equipamento.equipamento }}
+                            <div>{{ equipamento.quantidade or 1 }} un · {{ equipamento.horas_trabalhadas or "—" }} h · {{ equipamento.operador or "Sem operador" }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
 </body>
 </html>

@@ -1,8 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from typing import List
+import os
 from datetime import date
+from typing import List
+from urllib.parse import unquote
 
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
 from app.database import get_db
 from app.models import Foto
 from app.schemas import FotoCreate, FotoResponse
@@ -32,6 +37,19 @@ def listar_fotos(obra_id: int = None, data_ref: date = None, categoria: str = No
     if categoria:
         query = query.filter(Foto.categoria == categoria)
     return query.order_by(Foto.created_at.desc()).all()
+
+
+@router.get("/arquivo/{file_path:path}")
+def servir_arquivo_foto(file_path: str):
+    upload_dir = os.path.abspath(settings.upload_dir)
+    resolved_path = os.path.abspath(os.path.join(upload_dir, unquote(file_path)))
+
+    if resolved_path != upload_dir and not resolved_path.startswith(upload_dir + os.sep):
+        raise HTTPException(status_code=403, detail="Caminho de arquivo inválido")
+    if not os.path.isfile(resolved_path):
+        raise HTTPException(status_code=404, detail="Arquivo de foto não encontrado")
+
+    return FileResponse(resolved_path)
 
 
 @router.get("/{foto_id}", response_model=FotoResponse)

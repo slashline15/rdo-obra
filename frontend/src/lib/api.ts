@@ -4,17 +4,19 @@ function getToken(): string | null {
   return localStorage.getItem("token");
 }
 
-export async function apiFetch<T>(
+async function apiFetchResponse(
   path: string,
   options: RequestInit = {}
-): Promise<T> {
+): Promise<Response> {
   const token = getToken();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...((options.headers as Record<string, string>) ?? {}),
-  };
+  const headers = new Headers(options.headers ?? {});
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+
+  if (!headers.has("Content-Type") && options.body !== undefined && !isFormData) {
+    headers.set("Content-Type", "application/json");
+  }
   if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+    headers.set("Authorization", `Bearer ${token}`);
   }
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
@@ -29,6 +31,15 @@ export async function apiFetch<T>(
     const body = await res.json().catch(() => ({}));
     throw new Error(body.detail ?? `Erro ${res.status}`);
   }
+
+  return res;
+}
+
+export async function apiFetch<T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const res = await apiFetchResponse(path, options);
 
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -50,6 +61,24 @@ export function apiPut<T>(path: string, data: unknown) {
     method: "PUT",
     body: JSON.stringify(data),
   });
+}
+
+export async function apiGetText(path: string) {
+  const res = await apiFetchResponse(path);
+  return res.text();
+}
+
+export async function apiGetBlob(path: string) {
+  const res = await apiFetchResponse(path);
+  return res.blob();
+}
+
+export async function apiPostBlob(path: string, data?: unknown) {
+  const res = await apiFetchResponse(path, {
+    method: "POST",
+    body: data ? JSON.stringify(data) : undefined,
+  });
+  return res.blob();
 }
 
 export async function apiLogin(

@@ -16,9 +16,13 @@ import {
   Clock,
   Camera,
   History,
+  Download,
+  FileCode2,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/lib/auth";
+import { useAuth } from "@/lib/auth-context";
+import { apiGetBlob, apiGetText, apiPostBlob } from "@/lib/api";
 import {
   usePainel,
   useTransicaoDiario,
@@ -93,6 +97,18 @@ function EditableCell({
       autoFocus
     />
   );
+}
+
+async function runMutationWithToast<T>(
+  action: () => Promise<T>,
+  successMessage = "Alteração salva com sucesso"
+) {
+  try {
+    await action();
+    toast.success(successMessage);
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "Erro ao salvar alteração");
+  }
 }
 
 // --- Card wrapper ---
@@ -192,6 +208,73 @@ export default function DiarioPage() {
     }
   }
 
+  async function handlePreviewHtml() {
+    try {
+      const html = await apiGetText(`/rdo/preview/${obraIdNum}/${data}`);
+      const previewWindow = window.open("", "_blank", "noopener,noreferrer");
+
+      if (!previewWindow) {
+        toast.error("Não foi possível abrir a pré-visualização do relatório");
+        return;
+      }
+
+      previewWindow.document.open();
+      previewWindow.document.write(html);
+      previewWindow.document.close();
+      toast.success("Pré-visualização do relatório aberta em nova guia");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao gerar pré-visualização");
+    }
+  }
+
+  function triggerDownload(blob: Blob, fileName: string) {
+    const fileUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = fileUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(fileUrl);
+  }
+
+  async function handleExportHtml() {
+    try {
+      const html = await apiGetText(`/rdo/preview/${obraIdNum}/${data}`);
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      triggerDownload(blob, `rdo-${obraIdNum}-${data}.html`);
+      toast.success("HTML exportado com sucesso");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao exportar HTML");
+    }
+  }
+
+  async function handleExportPdf() {
+    try {
+      const blob = await apiPostBlob("/rdo/gerar", {
+        obra_id: obraIdNum,
+        data,
+        formato: "pdf",
+      });
+      triggerDownload(blob, `rdo-${obraIdNum}-${data}.pdf`);
+      toast.success("PDF exportado com sucesso");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao exportar PDF");
+    }
+  }
+
+  async function handleDownloadSavedPdf() {
+    if (!painel?.diario.pdf_path) return;
+
+    try {
+      const blob = await apiGetBlob(`/rdo/download/${encodeURIComponent(painel.diario.pdf_path)}`);
+      triggerDownload(blob, `rdo-${obraIdNum}-${data}.pdf`);
+      toast.success("PDF salvo baixado com sucesso");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao baixar PDF salvo");
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="p-8 space-y-4">
@@ -238,7 +321,25 @@ export default function DiarioPage() {
         </div>
 
         {/* Workflow buttons */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-end">
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => void handlePreviewHtml()}>
+            <Eye className="h-4 w-4" />
+            Visualizar HTML
+          </Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => void handleExportHtml()}>
+            <FileCode2 className="h-4 w-4" />
+            Exportar HTML
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-2"
+            onClick={() => void handleExportPdf()}
+            disabled={!isAprovado}
+          >
+            <Download className="h-4 w-4" />
+            Exportar PDF
+          </Button>
           {painel.diario.status === "rascunho" && isEngenheiro && (
             <Button size="sm" onClick={() => handleTransicao("submeter")} disabled={transicao.isPending}>
               Submeter para Revisão
@@ -273,9 +374,15 @@ export default function DiarioPage() {
           <CheckCircle2 className="h-4 w-4" />
           Diário aprovado — edição bloqueada.
           {painel.diario.pdf_path && (
-            <a href={`/api/rdo/download/${painel.diario.pdf_path}`} className="ml-auto underline font-medium">
-              Baixar PDF
-            </a>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto gap-2 text-green-800 hover:text-green-900"
+              onClick={() => void handleDownloadSavedPdf()}
+            >
+              <Download className="h-4 w-4" />
+              Baixar PDF salvo
+            </Button>
           )}
         </div>
       )}
@@ -292,12 +399,19 @@ export default function DiarioPage() {
               key={alerta.id}
               alerta={alerta}
               onResolve={() => {
-                resolverAlerta.mutate(alerta.id, {
-                  onError: (e) => toast.error(e.message),
-                });
+                void runMutationWithToast(
+                  () => resolverAlerta.mutateAsync(alerta.id),
+                  "Alerta resolvido com sucesso"
+                );
               }}
             />
           ))}
+        </div>
+      )}
+
+      {canEdit && (
+        <div className="rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+          Edição rápida ativa. Clique nos campos destacados para ajustar o diário sem sair da página.
         </div>
       )}
 
@@ -450,7 +564,12 @@ function EfetivoTable({
               <EditableCell
                 value={e.funcao}
                 disabled={!canEdit}
-                onSave={(v) => onUpdate.mutate({ id: e.id, funcao: v })}
+                onSave={(v) =>
+                  void runMutationWithToast(
+                    () => onUpdate.mutateAsync({ id: e.id, funcao: v }),
+                    "Efetivo atualizado com sucesso"
+                  )
+                }
               />
             </td>
             <td className="py-2">
@@ -458,7 +577,12 @@ function EfetivoTable({
                 value={e.quantidade}
                 type="number"
                 disabled={!canEdit}
-                onSave={(v) => onUpdate.mutate({ id: e.id, quantidade: Number(v) })}
+                onSave={(v) =>
+                  void runMutationWithToast(
+                    () => onUpdate.mutateAsync({ id: e.id, quantidade: Number(v) }),
+                    "Efetivo atualizado com sucesso"
+                  )
+                }
               />
             </td>
             <td className="py-2 text-muted-foreground">{e.empresa ?? "—"}</td>
@@ -491,10 +615,36 @@ function AtividadesBlock({
       {all.map((a) => (
         <div key={a.id} className="flex items-start gap-3 py-2 border-b last:border-0">
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{a.descricao}</p>
+            <div className="text-sm font-medium">
+              <EditableCell
+                value={a.descricao}
+                disabled={!canEdit}
+                onSave={(v) =>
+                  void runMutationWithToast(
+                    () => onUpdate.mutateAsync({ id: a.id, descricao: v }),
+                    "Atividade atualizada com sucesso"
+                  )
+                }
+              />
+            </div>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-xs text-muted-foreground">{a._group}</span>
-              {a.local && <span className="text-xs text-muted-foreground">| {a.local}</span>}
+              {a.local && (
+                <span className="text-xs text-muted-foreground">
+                  |
+                  {" "}
+                  <EditableCell
+                    value={a.local}
+                    disabled={!canEdit}
+                    onSave={(v) =>
+                      void runMutationWithToast(
+                        () => onUpdate.mutateAsync({ id: a.id, local: v }),
+                        "Atividade atualizada com sucesso"
+                      )
+                    }
+                  />
+                </span>
+              )}
             </div>
           </div>
           <div className="text-right shrink-0">
@@ -502,7 +652,12 @@ function AtividadesBlock({
               value={a.percentual_concluido}
               type="number"
               disabled={!canEdit}
-              onSave={(v) => onUpdate.mutate({ id: a.id, percentual_concluido: Number(v) })}
+              onSave={(v) =>
+                void runMutationWithToast(
+                  () => onUpdate.mutateAsync({ id: a.id, percentual_concluido: Number(v) }),
+                  "Atividade atualizada com sucesso"
+                )
+              }
             />
             <span className="text-xs text-muted-foreground">%</span>
           </div>
@@ -573,7 +728,12 @@ function MateriaisTable({
                 value={m.quantidade}
                 type="number"
                 disabled={!canEdit}
-                onSave={(v) => onUpdate.mutate({ id: m.id, quantidade: Number(v) })}
+                onSave={(v) =>
+                  void runMutationWithToast(
+                    () => onUpdate.mutateAsync({ id: m.id, quantidade: Number(v) }),
+                    "Material atualizado com sucesso"
+                  )
+                }
               />
               {m.unidade && <span className="text-xs text-muted-foreground ml-1">{m.unidade}</span>}
             </td>
@@ -630,13 +790,18 @@ function AnotacoesBlock({
               {a.prioridade}
             </span>
           </div>
-          <EditableCell
-            value={a.descricao}
-            disabled={!canEdit}
-            onSave={(v) => onUpdate.mutate({ id: a.id, descricao: v })}
-          />
-        </div>
-      ))}
+            <EditableCell
+              value={a.descricao}
+              disabled={!canEdit}
+              onSave={(v) =>
+                void runMutationWithToast(
+                  () => onUpdate.mutateAsync({ id: a.id, descricao: v }),
+                  "Anotação atualizada com sucesso"
+                )
+              }
+            />
+          </div>
+        ))}
     </div>
   );
 }
@@ -645,15 +810,20 @@ function FotosBlock({ items }: { items: FotoItem[] }) {
   return (
     <div className="grid grid-cols-3 gap-2">
       {items.map((f) => (
-        <div key={f.id} className="aspect-square rounded-md bg-muted flex items-center justify-center overflow-hidden">
+        <div key={f.id} className="aspect-square rounded-md bg-muted flex items-center justify-center overflow-hidden relative">
           <img
-            src={`/api/fotos/${f.arquivo}`}
+            src={`/api/fotos/arquivo/${encodeURIComponent(f.arquivo)}`}
             alt={f.descricao ?? "Foto"}
             className="object-cover w-full h-full"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = "none";
             }}
           />
+          {f.descricao && (
+            <div className="absolute inset-x-0 bottom-0 bg-background/80 px-2 py-1 text-[11px] text-foreground backdrop-blur-sm">
+              {f.descricao}
+            </div>
+          )}
         </div>
       ))}
     </div>

@@ -163,7 +163,7 @@ export function useUpdateAtividade(obraId: number, data: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...body }: { id: number; [k: string]: unknown }) =>
-      apiPut(`/servicos/${id}`, body),
+      apiPut(`/atividades/${id}`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["painel", obraId, data] }),
   });
 }
@@ -199,7 +199,7 @@ export function useResolverAlerta(obraId: number, data: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (alertaId: number) =>
-      apiPost(`/alertas/${alertaId}/resolver`),
+      apiPut(`/alertas/${alertaId}/resolver`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["painel", obraId, data] }),
   });
 }
