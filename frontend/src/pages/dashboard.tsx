@@ -172,18 +172,18 @@ export default function DashboardPage() {
               key={i}
               className={`flex items-start gap-3 p-3 rounded-lg border ${
                 insight.severidade === "critico"
-                  ? "border-red-200 bg-red-50"
+                  ? "border-red-500/25 bg-red-500/10"
                   : insight.severidade === "atencao"
-                  ? "border-yellow-200 bg-yellow-50"
-                  : "border-blue-200 bg-blue-50"
+                  ? "border-amber-500/25 bg-amber-500/10"
+                  : "border-sky-500/25 bg-sky-500/10"
               }`}
             >
               {insight.severidade === "critico" ? (
-                <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                <AlertCircle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
               ) : insight.severidade === "atencao" ? (
-                <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
+                <AlertCircle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
               ) : (
-                <Info className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
+                <Info className="h-4 w-4 text-sky-400 mt-0.5 shrink-0" />
               )}
               <div>
                 <p className="text-sm">{insight.texto}</p>

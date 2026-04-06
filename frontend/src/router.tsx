@@ -10,6 +10,7 @@ import LoginPage from "@/pages/login";
 import ObrasPage from "@/pages/obras";
 import DiarioPage from "@/pages/diario";
 import DashboardPage from "@/pages/dashboard";
+import UsuariosPage from "@/pages/usuarios";
 
 // Root route — renders either login or layout
 const rootRoute = createRootRoute({
@@ -60,6 +61,13 @@ const dashboardRoute = createRoute({
   component: DashboardPage,
 });
 
+// Usuarios
+const usuariosRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/usuarios",
+  component: UsuariosPage,
+});
+
 // Index redirect
 const indexRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
@@ -71,7 +79,7 @@ const indexRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  authLayoutRoute.addChildren([indexRoute, obrasRoute, diarioRoute, dashboardRoute]),
+  authLayoutRoute.addChildren([indexRoute, obrasRoute, diarioRoute, dashboardRoute, usuariosRoute]),
 ]);
 
 export const router = createRouter({ routeTree });

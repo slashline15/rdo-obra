@@ -8,14 +8,38 @@ import {
   HardHat,
   Moon,
   Sun,
+  Users,
+  Bell,
+  CalendarRange,
+  ListTodo,
+  Package,
+  NotebookPen,
+  Settings,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ReactNode } from "react";
 
-const NAV_ITEMS = [
-  { to: "/obras", label: "Obras", icon: HardHat },
-  { to: "/dashboard", label: "Dashboard", icon: BarChart3 },
-] as const;
+function NavItem({ to, icon: Icon, label }: { to: string; icon: React.ElementType; label: string }) {
+  return (
+    <Link
+      to={to}
+      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors [&.active]:bg-sidebar-accent [&.active]:text-primary [&.active]:font-semibold"
+    >
+      <Icon className="h-4 w-4 shrink-0" />
+      {label}
+    </Link>
+  );
+}
+
+function FutureNavItem({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
+  return (
+    <span className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground/40 cursor-not-allowed select-none" title="Em breve">
+      <Icon className="h-4 w-4 shrink-0" />
+      {label}
+      <span className="ml-auto text-[9px] uppercase tracking-widest opacity-60">soon</span>
+    </span>
+  );
+}
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
@@ -29,67 +53,76 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen flex">
-      {/* Sidebar */}
-      <aside className="w-64 border-r bg-sidebar text-sidebar-foreground flex flex-col">
-        <div className="p-4 border-b space-y-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/12 text-primary">
-              <ClipboardList className="h-5 w-5" />
-            </div>
-            <div>
-              <span className="block font-bold text-lg leading-none">RDO Digital</span>
-              <span className="text-xs text-muted-foreground">Painel de obra</span>
-            </div>
-          </div>
+      <aside className="w-60 border-r bg-sidebar text-sidebar-foreground flex flex-col shrink-0">
+        {/* Linha primária no topo */}
+        <div className="h-0.5 w-full bg-primary shrink-0" />
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full justify-between"
-            onClick={toggleTheme}
-          >
-            <span>{theme === "dark" ? "Tema escuro" : "Tema claro"}</span>
-            {theme === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-          </Button>
+        {/* Logo + Bell */}
+        <div className="px-4 py-4 border-b flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary border border-primary/25">
+            <ClipboardList className="h-4 w-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <span className="block font-bold text-sm leading-none tracking-tight">RDO Digital</span>
+            <span className="text-[11px] text-muted-foreground mt-0.5 block">Painel de obra</span>
+          </div>
+          <button className="relative p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors" title="Notificações">
+            <Bell className="h-4 w-4" />
+            {/* Badge de notificação */}
+            <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-primary border border-sidebar" />
+          </button>
         </div>
 
-        <div className="px-4 pt-4">
-          <div className="rounded-2xl border border-sidebar-border/80 bg-background/50 p-3">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Navegação</p>
-          </div>
-        </div>
+        {/* Nav principal */}
+        <nav className="flex-1 p-3 pt-4 space-y-0.5 overflow-y-auto">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground px-2 pb-2">Painel</p>
+          <NavItem to="/obras" icon={HardHat} label="Obras" />
+          <NavItem to="/dashboard" icon={BarChart3} label="Dashboard" />
+          <NavItem to="/usuarios" icon={Users} label="Usuários" />
 
-        <nav className="flex-1 p-3 space-y-1">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-sidebar-accent transition-colors [&.active]:bg-sidebar-accent [&.active]:text-sidebar-accent-foreground"
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </Link>
-          ))}
+          <div className="pt-3">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground px-2 pb-2">Planejamento</p>
+            <FutureNavItem icon={CalendarRange} label="Planejamento" />
+            <FutureNavItem icon={ListTodo} label="Tarefas" />
+          </div>
+
+          <div className="pt-3">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground px-2 pb-2">Registros</p>
+            <FutureNavItem icon={Package} label="Materiais" />
+            <FutureNavItem icon={NotebookPen} label="Anotações" />
+          </div>
         </nav>
 
-        <div className="p-3 border-t space-y-2">
-          <div className="rounded-2xl border border-sidebar-border/80 bg-background/50 px-3 py-3">
+        {/* Rodapé */}
+        <div className="p-3 border-t space-y-1">
+          <FutureNavItem icon={Settings} label="Configurações" />
+          <div className="px-3 py-2.5 rounded-lg bg-background/50 mt-1">
             <p className="text-sm font-medium truncate">{user?.nome}</p>
-            <p className="text-xs text-muted-foreground">{user?.role}</p>
+            <p className="text-[11px] text-muted-foreground capitalize">{user?.role}</p>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2"
-            onClick={handleLogout}
-          >
-            <LogOut className="h-4 w-4" />
-            Sair
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex-1 justify-start gap-2 text-muted-foreground hover:text-foreground"
+              onClick={handleLogout}
+            >
+              <LogOut className="h-4 w-4" />
+              Sair
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Mudar para claro" : "Mudar para escuro"}
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+          </div>
         </div>
       </aside>
 
-      {/* Main content */}
       <main className="flex-1 overflow-auto bg-background">
         {children}
       </main>

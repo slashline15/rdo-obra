@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPost, apiPut } from "@/lib/api";
+import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
 
 export interface PainelData {
   obra: { id: number; nome: string; endereco: string | null };
@@ -114,15 +114,6 @@ export interface AuditLogItem {
   created_at: string;
 }
 
-export interface DashboardKPIs {
-  produtividade_media: number;
-  dias_improdutivos: number;
-  atividades_atrasadas: number;
-  tempo_medio_aprovacao_horas: number;
-  total_efetivo_periodo: number;
-  materiais_pendentes: number;
-}
-
 // --- Queries ---
 
 export function usePainel(obraId: number | null, data: string | null) {
@@ -148,7 +139,7 @@ export function useAuditoria(obraId: number | null, data: string | null) {
   });
 }
 
-// --- Mutations ---
+// --- Update mutations ---
 
 export function useUpdateEfetivo(obraId: number, data: string) {
   const qc = useQueryClient();
@@ -185,6 +176,80 @@ export function useUpdateAnotacao(obraId: number, data: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["painel", obraId, data] }),
   });
 }
+
+// --- Delete mutations ---
+
+export function useDeleteEfetivo(obraId: number, data: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => apiDelete(`/efetivo/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["painel", obraId, data] }),
+  });
+}
+
+export function useDeleteAtividade(obraId: number, data: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => apiDelete(`/atividades/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["painel", obraId, data] }),
+  });
+}
+
+export function useDeleteMaterial(obraId: number, data: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => apiDelete(`/materiais/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["painel", obraId, data] }),
+  });
+}
+
+export function useDeleteAnotacao(obraId: number, data: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => apiDelete(`/anotacoes/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["painel", obraId, data] }),
+  });
+}
+
+// --- Create mutations ---
+
+export function useAddEfetivo(obraId: number, data: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { obra_id: number; funcao: string; quantidade: number; empresa?: string; data?: string }) =>
+      apiPost(`/efetivo/`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["painel", obraId, data] }),
+  });
+}
+
+export function useAddAtividade(obraId: number, data: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { obra_id: number; descricao: string; local?: string; data?: string }) =>
+      apiPost(`/atividades/`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["painel", obraId, data] }),
+  });
+}
+
+export function useAddMaterial(obraId: number, data: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { obra_id: number; tipo: string; material: string; quantidade?: number; unidade?: string; data?: string }) =>
+      apiPost(`/materiais/`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["painel", obraId, data] }),
+  });
+}
+
+export function useAddAnotacao(obraId: number, data: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { obra_id: number; descricao: string; tipo?: string; prioridade?: string; data?: string }) =>
+      apiPost(`/anotacoes/`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["painel", obraId, data] }),
+  });
+}
+
+// --- Workflow ---
 
 export function useTransicaoDiario(obraId: number, data: string) {
   const qc = useQueryClient();

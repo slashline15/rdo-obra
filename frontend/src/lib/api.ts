@@ -63,6 +63,10 @@ export function apiPut<T>(path: string, data: unknown) {
   });
 }
 
+export function apiDelete(path: string) {
+  return apiFetch<void>(path, { method: "DELETE" });
+}
+
 export async function apiGetText(path: string) {
   const res = await apiFetchResponse(path);
   return res.text();
