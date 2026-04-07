@@ -7,6 +7,8 @@ from datetime import datetime
 from typing import Optional, Literal
 from enum import Enum
 
+from app.core.time import utc_now
+
 
 class Canal(str, Enum):
     TELEGRAM = "telegram"
@@ -32,7 +34,7 @@ class IncomingMessage(BaseModel):
     audio_path: Optional[str] = None
     foto_path: Optional[str] = None
     legenda: Optional[str] = None
-    timestamp: datetime = datetime.utcnow()
+    timestamp: datetime = utc_now()
     raw_data: Optional[dict] = None  # dados brutos do canal, se precisar
 
 

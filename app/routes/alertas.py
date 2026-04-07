@@ -1,11 +1,13 @@
 """Rotas de alertas — listar, avaliar, resolver."""
-from datetime import date, datetime
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.core.auth import get_current_user
+from app.core.permissions import ensure_obra_access
+from app.core.time import utc_now
 from app.models import Alerta, Usuario
 from app.services.alert_engine import avaliar_alertas
 
@@ -16,6 +18,7 @@ router = APIRouter(prefix="/alertas", tags=["Alertas"])
 def listar_alertas(obra_id: int, data_ref: date, db: Session = Depends(get_db),
                    current_user: Usuario = Depends(get_current_user)):
     """Lista alertas de um dia (sem reavaliar)."""
+    ensure_obra_access(current_user, obra_id, required_level=3)
     alertas = db.query(Alerta).filter(
         Alerta.obra_id == obra_id, Alerta.data == data_ref
     ).order_by(Alerta.severidade, Alerta.created_at).all()
@@ -26,6 +29,7 @@ def listar_alertas(obra_id: int, data_ref: date, db: Session = Depends(get_db),
 def avaliar(obra_id: int, data_ref: date, db: Session = Depends(get_db),
             current_user: Usuario = Depends(get_current_user)):
     """Roda as 5 regras de alerta e retorna estado atualizado."""
+    ensure_obra_access(current_user, obra_id, required_level=2)
     alertas = avaliar_alertas(db, obra_id, data_ref)
     total = {"alta": 0, "media": 0, "baixa": 0}
     for a in alertas:
@@ -46,9 +50,10 @@ def resolver_alerta(alerta_id: int, observacao: str = None,
     alerta = db.query(Alerta).filter(Alerta.id == alerta_id).first()
     if not alerta:
         raise HTTPException(status_code=404, detail="Alerta não encontrado")
+    ensure_obra_access(current_user, alerta.obra_id, required_level=2)
     alerta.resolvido = True
     alerta.resolvido_por_id = current_user.id
-    alerta.resolvido_em = datetime.utcnow()
+    alerta.resolvido_em = utc_now()
     db.commit()
     return _serialize(alerta)
 

@@ -37,6 +37,8 @@ class Settings(BaseSettings):
 
     # JWT Auth
     jwt_secret: str = "rdo-digital-secret-change-in-production"
+    legacy_bootstrap_token: Optional[str] = None
+    invite_token_ttl_hours: int = 72
 
     # App
     app_name: str = "RDO Digital"

@@ -9,6 +9,7 @@ from datetime import date
 
 from app.database import get_db
 from app.core.auth import get_current_user
+from app.core.permissions import ensure_obra_access, get_access_level
 from app.models import DiarioDia, DiarioStatus, Usuario
 from app.schemas import RDORequest
 from app.services.rdo_generator import (
@@ -24,13 +25,14 @@ router = APIRouter(prefix="/rdo", tags=["RDO - Relatório"])
 @router.post("/gerar")
 def gerar_rdo(request: RDORequest, db: Session = Depends(get_db),
               current_user: Usuario = Depends(get_current_user)):
+    ensure_obra_access(current_user, request.obra_id, required_level=3)
     # Verificar se diário está aprovado (para PDF)
     if request.formato != "json":
         diario = db.query(DiarioDia).filter(
             DiarioDia.obra_id == request.obra_id,
             DiarioDia.data == request.data,
         ).first()
-        if not diario or diario.status != DiarioStatus.APROVADO:
+        if not diario or diario.deletado_em or diario.status != DiarioStatus.APROVADO:
             raise HTTPException(
                 status_code=403,
                 detail="PDF só pode ser gerado após aprovação do diário."
@@ -69,6 +71,7 @@ def gerar_rdo(request: RDORequest, db: Session = Depends(get_db),
 @router.get("/preview/{obra_id}/{data_ref}")
 def preview_rdo(obra_id: int, data_ref: date, db: Session = Depends(get_db),
                 current_user: Usuario = Depends(get_current_user)):
+    ensure_obra_access(current_user, obra_id, required_level=3)
     try:
         data = gerar_rdo_data(obra_id, data_ref, db)
         html = gerar_rdo_html(data)
@@ -88,6 +91,12 @@ def download_rdo(file_path: str,
         raise HTTPException(status_code=403, detail="Caminho de arquivo inválido")
     if not os.path.isfile(resolved_path):
         raise HTTPException(status_code=404, detail="PDF não encontrado")
+    diario = db.query(DiarioDia).filter(DiarioDia.pdf_path == resolved_path).first()
+    if not diario:
+        raise HTTPException(status_code=404, detail="PDF sem diário associado")
+    if diario.deletado_em and get_access_level(current_user) > 1:
+        raise HTTPException(status_code=404, detail="PDF indisponível")
+    ensure_obra_access(current_user, diario.obra_id, required_level=3)
 
     return FileResponse(
         resolved_path,

@@ -12,6 +12,7 @@ import {
   Bell,
   CalendarRange,
   ListTodo,
+  BookOpenText,
   Package,
   NotebookPen,
   Settings,
@@ -79,6 +80,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           <NavItem to="/obras" icon={HardHat} label="Obras" />
           <NavItem to="/dashboard" icon={BarChart3} label="Dashboard" />
           <NavItem to="/usuarios" icon={Users} label="Usuários" />
+          <NavItem to="/docs" icon={BookOpenText} label="Helper" />
 
           <div className="pt-3">
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground px-2 pb-2">Planejamento</p>

@@ -9,16 +9,19 @@ from app.models import Material
 from app.schemas import MaterialCreate, MaterialResponse, MaterialUpdate
 from app.core.auth import get_current_user
 from app.core.diary_lock import check_diary_editable
+from app.core.permissions import ensure_obra_access, resolve_obra_scope, scope_query_to_user
 from app.services.audit import log_changes
 
 router = APIRouter(prefix="/materiais", tags=["Materiais"])
 
 
 @router.post("/", response_model=MaterialResponse)
-def criar_material(material: MaterialCreate, db: Session = Depends(get_db)):
+def criar_material(material: MaterialCreate, db: Session = Depends(get_db),
+                   current_user=Depends(get_current_user)):
     data = material.model_dump()
     if not data.get("data"):
         data["data"] = date.today()
+    data["obra_id"] = resolve_obra_scope(current_user, data.get("obra_id"), require_explicit=True)
     db_material = Material(**data)
     db.add(db_material)
     db.commit()
@@ -27,10 +30,12 @@ def criar_material(material: MaterialCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/", response_model=List[MaterialResponse])
-def listar_materiais(obra_id: int = None, data_ref: date = None, tipo: str = None, db: Session = Depends(get_db)):
-    query = db.query(Material)
-    if obra_id:
-        query = query.filter(Material.obra_id == obra_id)
+def listar_materiais(obra_id: int = None, data_ref: date = None, tipo: str = None, db: Session = Depends(get_db),
+                     current_user=Depends(get_current_user)):
+    query = scope_query_to_user(db.query(Material), Material, current_user)
+    scoped_obra_id = resolve_obra_scope(current_user, obra_id, require_explicit=False)
+    if scoped_obra_id:
+        query = query.filter(Material.obra_id == scoped_obra_id)
     if data_ref:
         query = query.filter(Material.data == data_ref)
     if tipo:
@@ -39,8 +44,10 @@ def listar_materiais(obra_id: int = None, data_ref: date = None, tipo: str = Non
 
 
 @router.get("/resumo/{obra_id}")
-def resumo_materiais(obra_id: int, material_nome: str = None, db: Session = Depends(get_db)):
+def resumo_materiais(obra_id: int, material_nome: str = None, db: Session = Depends(get_db),
+                     current_user=Depends(get_current_user)):
     """Resumo de entradas/saídas de material (ex: 'quanto cimento chegou essa semana?')"""
+    ensure_obra_access(current_user, obra_id, required_level=3)
     query = db.query(
         Material.material,
         Material.tipo,
@@ -67,10 +74,12 @@ def resumo_materiais(obra_id: int, material_nome: str = None, db: Session = Depe
 
 
 @router.get("/{material_id}", response_model=MaterialResponse)
-def buscar_material(material_id: int, db: Session = Depends(get_db)):
+def buscar_material(material_id: int, db: Session = Depends(get_db),
+                    current_user=Depends(get_current_user)):
     material = db.query(Material).filter(Material.id == material_id).first()
     if not material:
         raise HTTPException(status_code=404, detail="Material não encontrado")
+    ensure_obra_access(current_user, material.obra_id, required_level=3)
     return material
 
 
@@ -80,6 +89,7 @@ def atualizar_material(material_id: int, dados: MaterialUpdate, db: Session = De
     material = db.query(Material).filter(Material.id == material_id).first()
     if not material:
         raise HTTPException(status_code=404, detail="Material não encontrado")
+    ensure_obra_access(current_user, material.obra_id, required_level=2)
     check_diary_editable(db, material.obra_id, material.data)
     updates = dados.model_dump(exclude_unset=True)
     old = {k: getattr(material, k) for k in updates}
@@ -92,10 +102,13 @@ def atualizar_material(material_id: int, dados: MaterialUpdate, db: Session = De
 
 
 @router.delete("/{material_id}")
-def deletar_material(material_id: int, db: Session = Depends(get_db)):
+def deletar_material(material_id: int, db: Session = Depends(get_db),
+                     current_user=Depends(get_current_user)):
     material = db.query(Material).filter(Material.id == material_id).first()
     if not material:
         raise HTTPException(status_code=404, detail="Material não encontrado")
+    ensure_obra_access(current_user, material.obra_id, required_level=2)
+    check_diary_editable(db, material.obra_id, material.data)
     db.delete(material)
     db.commit()
     return {"detail": "Material removido"}

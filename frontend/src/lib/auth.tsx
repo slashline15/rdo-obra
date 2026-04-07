@@ -14,6 +14,8 @@ interface User {
   role: string;
   obra_id: number | null;
   email: string | null;
+  nivel_acesso: number;
+  pode_aprovar_diario: boolean;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -50,12 +52,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
-  const role = user?.role ?? "";
-  const isAdmin = role === "admin" || role === "responsavel";
-  const isEngenheiro = role === "engenheiro" || isAdmin;
+  const level = user?.nivel_acesso ?? 99;
+  const canApproveDiario = !!user?.pode_aprovar_diario || level === 1;
+  const isAdmin = level === 1;
+  const isEngenheiro = level <= 2;
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, isAdmin, isEngenheiro }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, isAdmin, isEngenheiro, canApproveDiario }}>
       {children}
     </AuthContext.Provider>
   );

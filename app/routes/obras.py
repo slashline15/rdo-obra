@@ -6,13 +6,13 @@ from app.database import get_db
 from app.models import Obra
 from app.schemas import ObraCreate, ObraResponse
 from app.core.auth import get_current_user
+from app.core.permissions import ensure_obra_access, get_access_level
 
 router = APIRouter(prefix="/obras", tags=["Obras"])
 
 
 def _require_adminish(current_user) -> None:
-    role = "admin" if current_user.role == "responsavel" else current_user.role
-    if role != "admin":
+    if get_access_level(current_user) != 1:
         raise HTTPException(status_code=403, detail="Acesso negado. Necessário: admin")
 
 
@@ -37,6 +37,10 @@ def listar_obras(
     current_user=Depends(get_current_user),
 ):
     query = db.query(Obra)
+    if get_access_level(current_user) > 1:
+        if current_user.obra_id is None:
+            return []
+        query = query.filter(Obra.id == current_user.obra_id)
     if status:
         query = query.filter(Obra.status == status)
     return query.all()
@@ -51,6 +55,7 @@ def buscar_obra(
     obra = db.query(Obra).filter(Obra.id == obra_id).first()
     if not obra:
         raise HTTPException(status_code=404, detail="Obra não encontrada")
+    ensure_obra_access(current_user, obra.id, required_level=3)
     return obra
 
 
@@ -61,10 +66,10 @@ def atualizar_obra(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    _require_adminish(current_user)
     obra = db.query(Obra).filter(Obra.id == obra_id).first()
     if not obra:
         raise HTTPException(status_code=404, detail="Obra não encontrada")
+    ensure_obra_access(current_user, obra.id, required_level=2)
     for key, value in dados.model_dump().items():
         setattr(obra, key, value)
     db.commit()

@@ -7,6 +7,7 @@ from sqlalchemy import func
 
 from app.database import get_db
 from app.core.auth import get_current_user
+from app.core.permissions import ensure_obra_access
 from app.models import (
     Atividade, AtividadeStatus, Efetivo, Material,
     DiaImprodutivo, DiarioDia, DiarioStatus, Usuario, Obra
@@ -21,6 +22,7 @@ def dashboard_kpis(obra_id: int,
                    db: Session = Depends(get_db),
                    current_user: Usuario = Depends(get_current_user)):
     """6 KPIs para o dashboard executivo."""
+    ensure_obra_access(current_user, obra_id, required_level=3)
     obra = db.query(Obra).filter(Obra.id == obra_id).first()
     if not obra:
         raise HTTPException(status_code=404, detail="Obra não encontrada")
@@ -30,7 +32,7 @@ def dashboard_kpis(obra_id: int,
     if not data_inicio:
         data_inicio = data_fim - timedelta(days=30)
 
-    dias_periodo = max((data_fim - data_inicio).days, 1)
+    dias_periodo = max((data_fim - data_inicio).days + 1, 1)
 
     # 1. Produtividade: atividades concluídas no período / dias
     concluidas = db.query(Atividade).filter(
@@ -118,6 +120,7 @@ def dashboard_insights(obra_id: int,
                        db: Session = Depends(get_db),
                        current_user: Usuario = Depends(get_current_user)):
     """Insights em linguagem natural — template-based, sem LLM."""
+    ensure_obra_access(current_user, obra_id, required_level=3)
     if not data_fim:
         data_fim = date.today()
     if not data_inicio:
@@ -139,7 +142,7 @@ def dashboard_insights(obra_id: int,
             Atividade.dias_atraso > 0,
         ).count()
         insights.append({
-            "texto": f"Nos últimos {(data_fim - data_inicio).days} dias, {dias_chuva} dia(s) foram improdutivos por chuva, impactando {atrasadas} atividade(s).",
+            "texto": f"Nos últimos {(data_fim - data_inicio).days + 1} dias, {dias_chuva} dia(s) foram improdutivos por chuva, impactando {atrasadas} atividade(s).",
             "severidade": "atencao" if dias_chuva >= 3 else "info",
             "data_ref": None,
             "evidencia": f"{dias_chuva} registros de DiaImprodutivo com motivo 'chuva'",

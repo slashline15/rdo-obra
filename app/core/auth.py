@@ -2,7 +2,9 @@
 Autenticação JWT para o painel web.
 Bot (Telegram/WhatsApp) continua autenticando por telefone — não passa por aqui.
 """
-from datetime import datetime, timedelta
+from datetime import timedelta
+import hashlib
+import secrets
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
@@ -12,6 +14,7 @@ import bcrypt
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.time import utc_now
 from app.database import get_db
 from app.models import Usuario
 
@@ -31,9 +34,17 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
+    expire = utc_now() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": int(expire.timestamp())})
     return jwt.encode(to_encode, settings.jwt_secret, algorithm=ALGORITHM)
+
+
+def generate_invite_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def hash_invite_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def get_current_user(
@@ -48,10 +59,18 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[ALGORITHM],
+            options={"verify_exp": False},
+        )
         sub = payload.get("sub")
+        exp = payload.get("exp")
         if sub is None:
             raise HTTPException(status_code=401, detail="Token inválido")
+        if not isinstance(exp, (int, float)) or exp < utc_now().timestamp():
+            raise HTTPException(status_code=401, detail="Token inválido ou expirado")
         user_id = int(sub)
         if not user_id:
             raise HTTPException(status_code=401, detail="Token inválido")

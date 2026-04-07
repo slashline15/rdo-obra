@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.core.auth import get_current_user
+from app.core.permissions import ensure_obra_access, get_access_level
 from app.models import (
     Obra, Empresa, Atividade, Efetivo, Anotacao, Material,
     Equipamento, Clima, Foto, Expediente, DiarioDia, Alerta,
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/painel", tags=["Painel"])
 def painel_diario(obra_id: int, data_ref: date, db: Session = Depends(get_db),
                   current_user=Depends(get_current_user)):
     """Retorna TUDO de um dia para o painel de revisão."""
+    ensure_obra_access(current_user, obra_id, required_level=3)
     obra = db.query(Obra).filter(Obra.id == obra_id).first()
     if not obra:
         raise HTTPException(status_code=404, detail="Obra não encontrada")
@@ -30,6 +32,8 @@ def painel_diario(obra_id: int, data_ref: date, db: Session = Depends(get_db),
     diario = db.query(DiarioDia).filter(
         DiarioDia.obra_id == obra_id, DiarioDia.data == data_ref
     ).first()
+    if diario and diario.deletado_em and get_access_level(current_user) > 1:
+        raise HTTPException(status_code=404, detail="Diário removido para esta obra")
     if not diario:
         diario = DiarioDia(obra_id=obra_id, data=data_ref, status=DiarioStatus.RASCUNHO)
         db.add(diario)
@@ -167,6 +171,9 @@ def painel_diario(obra_id: int, data_ref: date, db: Session = Depends(get_db),
             "aprovado_em": str(diario.aprovado_em) if diario.aprovado_em else None,
             "observacao_aprovacao": diario.observacao_aprovacao,
             "pdf_path": diario.pdf_path,
+            "deletado_em": str(diario.deletado_em) if diario.deletado_em else None,
+            "deletado_por_id": diario.deletado_por_id,
+            "motivo_exclusao": diario.motivo_exclusao,
         },
         "atividades": {
             "iniciadas": [_serialize_atividade(a) for a in iniciadas],

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
+import { apiDelete, apiFetch, apiGet, apiPost, apiPut } from "@/lib/api";
 
 export interface PainelData {
   obra: { id: number; nome: string; endereco: string | null };
@@ -14,6 +14,9 @@ export interface PainelData {
     aprovado_em: string | null;
     observacao_aprovacao: string | null;
     pdf_path: string | null;
+    deletado_em: string | null;
+    deletado_por_id: number | null;
+    motivo_exclusao: string | null;
   };
   atividades: {
     iniciadas: Atividade[];
@@ -114,6 +117,30 @@ export interface AuditLogItem {
   created_at: string;
 }
 
+export interface InviteItem {
+  id: number;
+  email: string;
+  obra_id: number | null;
+  role: string;
+  nivel_acesso: number;
+  pode_aprovar_diario: boolean;
+  cargo: string | null;
+  status: string;
+  expira_em: string;
+  created_at: string | null;
+}
+
+export interface DeletedDiarioItem {
+  id: number;
+  obra_id: number;
+  data: string;
+  status: string;
+  pdf_path: string | null;
+  deletado_em: string | null;
+  deletado_por_id: number | null;
+  motivo_exclusao: string | null;
+}
+
 // --- Queries ---
 
 export function usePainel(obraId: number | null, data: string | null) {
@@ -136,6 +163,32 @@ export function useAuditoria(obraId: number | null, data: string | null) {
     queryKey: ["auditoria", obraId, data],
     queryFn: () => apiGet<AuditLogItem[]>(`/auditoria/${obraId}/${data}`),
     enabled: !!obraId && !!data,
+  });
+}
+
+export function useConvites(obraId?: number | null, enabled = true) {
+  return useQuery({
+    queryKey: ["convites", obraId ?? null],
+    queryFn: () =>
+      apiGet<InviteItem[]>(obraId ? `/auth/invites?obra_id=${obraId}` : "/auth/invites"),
+    enabled,
+  });
+}
+
+export function useLixeiraDiario(
+  filters: { obraId?: number | null; dataInicio?: string; dataFim?: string },
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ["diario-lixeira", filters.obraId ?? null, filters.dataInicio ?? null, filters.dataFim ?? null],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (filters.obraId) params.set("obra_id", String(filters.obraId));
+      if (filters.dataInicio) params.set("data_inicio", filters.dataInicio);
+      if (filters.dataFim) params.set("data_fim", filters.dataFim);
+      return apiGet<DeletedDiarioItem[]>(`/diario/lixeira${params.size ? `?${params.toString()}` : ""}`);
+    },
+    enabled,
   });
 }
 
@@ -266,5 +319,69 @@ export function useResolverAlerta(obraId: number, data: string) {
     mutationFn: (alertaId: number) =>
       apiPut(`/alertas/${alertaId}/resolver`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["painel", obraId, data] }),
+  });
+}
+
+export function useExcluirDiario(obraId: number, data: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { motivo?: string }) =>
+      apiFetch(`/diario/${obraId}/${data}`, {
+        method: "DELETE",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ["painel", obraId, data] }),
+        qc.invalidateQueries({ queryKey: ["diario-lixeira", obraId] }),
+        qc.invalidateQueries({ queryKey: ["auditoria", obraId, data] }),
+      ]),
+  });
+}
+
+export function useRestaurarDiario(obraId: number, data: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost(`/diario/${obraId}/${data}/restaurar`),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ["painel", obraId, data] }),
+        qc.invalidateQueries({ queryKey: ["diario-lixeira", obraId] }),
+        qc.invalidateQueries({ queryKey: ["auditoria", obraId, data] }),
+      ]),
+  });
+}
+
+export function useCriarConvite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      email: string;
+      obra_id?: number | null;
+      telefone?: string;
+      role: string;
+      nivel_acesso: number;
+      pode_aprovar_diario?: boolean;
+      cargo?: string;
+    }) => apiPost<{ invite: InviteItem; token: string }>("/auth/invites", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["convites"] }),
+  });
+}
+
+export function useReenviarConvite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (inviteId: number) =>
+      apiPost<{ invite: InviteItem; token: string }>(`/auth/invites/${inviteId}/reissue`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["convites"] }),
+  });
+}
+
+export function useRevogarConvite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (inviteId: number) =>
+      apiPost<InviteItem>(`/auth/invites/${inviteId}/revoke`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["convites"] }),
   });
 }

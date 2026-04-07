@@ -1,6 +1,10 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import date, datetime
 from typing import Optional, List
+
+
+class ORMModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
 
 # === Empresa ===
@@ -14,11 +18,9 @@ class EmpresaBase(BaseModel):
 class EmpresaCreate(EmpresaBase):
     pass
 
-class EmpresaResponse(EmpresaBase):
+class EmpresaResponse(EmpresaBase, ORMModel):
     id: int
     created_at: datetime
-    class Config:
-        from_attributes = True
 
 
 # === Obra ===
@@ -35,11 +37,9 @@ class ObraBase(BaseModel):
 class ObraCreate(ObraBase):
     pass
 
-class ObraResponse(ObraBase):
+class ObraResponse(ObraBase, ORMModel):
     id: int
     created_at: datetime
-    class Config:
-        from_attributes = True
 
 
 # === Usuario ===
@@ -48,16 +48,19 @@ class UsuarioBase(BaseModel):
     telefone: str
     obra_id: Optional[int] = None
     role: Optional[str] = "estagiario"
+    nivel_acesso: Optional[int] = 3
+    pode_aprovar_diario: Optional[bool] = False
+    registro_profissional: Optional[str] = None
+    empresa_vinculada: Optional[str] = None
+    email: Optional[str] = None
     ativo: Optional[bool] = True
 
 class UsuarioCreate(UsuarioBase):
     pass
 
-class UsuarioResponse(UsuarioBase):
+class UsuarioResponse(UsuarioBase, ORMModel):
     id: int
     created_at: datetime
-    class Config:
-        from_attributes = True
 
 
 # === Servico ===
@@ -75,11 +78,9 @@ class ServicoBase(BaseModel):
 class ServicoCreate(ServicoBase):
     pass
 
-class ServicoResponse(ServicoBase):
+class ServicoResponse(ServicoBase, ORMModel):
     id: int
     created_at: datetime
-    class Config:
-        from_attributes = True
 
 
 # === Efetivo ===
@@ -96,11 +97,9 @@ class EfetivoBase(BaseModel):
 class EfetivoCreate(EfetivoBase):
     pass
 
-class EfetivoResponse(EfetivoBase):
+class EfetivoResponse(EfetivoBase, ORMModel):
     id: int
     created_at: datetime
-    class Config:
-        from_attributes = True
 
 
 # === Anotacao ===
@@ -116,11 +115,9 @@ class AnotacaoBase(BaseModel):
 class AnotacaoCreate(AnotacaoBase):
     pass
 
-class AnotacaoResponse(AnotacaoBase):
+class AnotacaoResponse(AnotacaoBase, ORMModel):
     id: int
     created_at: datetime
-    class Config:
-        from_attributes = True
 
 
 # === Material ===
@@ -140,11 +137,9 @@ class MaterialBase(BaseModel):
 class MaterialCreate(MaterialBase):
     pass
 
-class MaterialResponse(MaterialBase):
+class MaterialResponse(MaterialBase, ORMModel):
     id: int
     created_at: datetime
-    class Config:
-        from_attributes = True
 
 
 # === Equipamento ===
@@ -163,11 +158,9 @@ class EquipamentoBase(BaseModel):
 class EquipamentoCreate(EquipamentoBase):
     pass
 
-class EquipamentoResponse(EquipamentoBase):
+class EquipamentoResponse(EquipamentoBase, ORMModel):
     id: int
     created_at: datetime
-    class Config:
-        from_attributes = True
 
 
 # === Clima ===
@@ -184,11 +177,9 @@ class ClimaBase(BaseModel):
 class ClimaCreate(ClimaBase):
     pass
 
-class ClimaResponse(ClimaBase):
+class ClimaResponse(ClimaBase, ORMModel):
     id: int
     created_at: datetime
-    class Config:
-        from_attributes = True
 
 
 # === Foto ===
@@ -204,11 +195,9 @@ class FotoBase(BaseModel):
 class FotoCreate(FotoBase):
     pass
 
-class FotoResponse(FotoBase):
+class FotoResponse(FotoBase, ORMModel):
     id: int
     created_at: datetime
-    class Config:
-        from_attributes = True
 
 
 # === Intent Classification (WhatsApp input) ===
@@ -289,7 +278,7 @@ class TransicaoDiario(BaseModel):
     acao: str  # submeter, aprovar, rejeitar, reabrir
     observacao: Optional[str] = None
 
-class DiarioDiaResponse(BaseModel):
+class DiarioDiaResponse(ORMModel):
     id: int
     obra_id: int
     data: date
@@ -300,13 +289,14 @@ class DiarioDiaResponse(BaseModel):
     aprovado_em: Optional[datetime] = None
     observacao_aprovacao: Optional[str] = None
     pdf_path: Optional[str] = None
-    class Config:
-        from_attributes = True
+    deletado_em: Optional[datetime] = None
+    deletado_por_id: Optional[int] = None
+    motivo_exclusao: Optional[str] = None
 
 
 # === Alertas ===
 
-class AlertaResponse(BaseModel):
+class AlertaResponse(ORMModel):
     id: int
     regra: str
     severidade: str
@@ -314,13 +304,11 @@ class AlertaResponse(BaseModel):
     resolvido: bool
     dados_contexto: Optional[dict] = None
     created_at: datetime
-    class Config:
-        from_attributes = True
 
 
 # === Audit ===
 
-class AuditLogResponse(BaseModel):
+class AuditLogResponse(ORMModel):
     id: int
     tabela: str
     registro_id: int
@@ -329,8 +317,6 @@ class AuditLogResponse(BaseModel):
     valor_novo: Optional[str] = None
     usuario_id: int
     created_at: datetime
-    class Config:
-        from_attributes = True
 
 
 # === Dashboard ===
@@ -348,3 +334,39 @@ class InsightResponse(BaseModel):
     severidade: str  # info, atencao, critico
     data_ref: Optional[date] = None
     evidencia: str
+
+
+class InviteCreateRequest(BaseModel):
+    email: str
+    obra_id: Optional[int] = None
+    telefone: Optional[str] = None
+    role: str = "encarregado"
+    nivel_acesso: int = 3
+    pode_aprovar_diario: bool = False
+    cargo: Optional[str] = None
+
+
+class InviteAcceptRequest(BaseModel):
+    token: str
+    nome: str
+    senha: str
+    telefone: str
+    email: Optional[str] = None
+    registro_profissional: Optional[str] = None
+    empresa_vinculada: Optional[str] = None
+
+
+class InviteResponse(ORMModel):
+    id: int
+    email: str
+    obra_id: Optional[int] = None
+    role: str
+    nivel_acesso: int
+    pode_aprovar_diario: bool
+    cargo: Optional[str] = None
+    status: str
+    expira_em: datetime
+
+
+class ExcluirDiarioRequest(BaseModel):
+    motivo: Optional[str] = None

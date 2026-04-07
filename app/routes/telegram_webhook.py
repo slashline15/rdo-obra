@@ -1,5 +1,5 @@
 """Webhook route para Telegram Bot API."""
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.adapters.telegram import TelegramAdapter
 from app.core.orchestrator import Orchestrator
+from app.core.time import utc_now
 from app.core.types import Canal, OutgoingMessage
 from app.models import Obra, SolicitacaoCadastro, Usuario
 
@@ -32,7 +33,7 @@ def _nome_solicitante(message: dict) -> str:
 
 def _limpar_solicitacoes_expiradas():
     """Remove solicitações antigas para evitar acúmulo em memória."""
-    agora = datetime.utcnow()
+    agora = utc_now()
     expiradas = [
         chat_id for chat_id, dados in _cadastros_pendentes.items()
         if agora - dados.get("created_at", agora) > _TTL_SOLICITACAO
@@ -57,7 +58,7 @@ async def _solicitar_aprovacao_cadastro(adapter: TelegramAdapter, db: Session, m
         "chat_id": chat_id,
         "nome": nome,
         "username": (message.get("from", {}) or {}).get("username"),
-        "created_at": datetime.utcnow()
+        "created_at": utc_now()
     }
 
     obras_com_admin = db.query(Obra).filter(Obra.usuario_admin.isnot(None)).all()

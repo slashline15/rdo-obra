@@ -5,12 +5,14 @@ from typing import List
 from app.database import get_db
 from app.models import Empresa
 from app.schemas import EmpresaCreate, EmpresaResponse
+from app.core.permissions import require_level
 
 router = APIRouter(prefix="/empresas", tags=["Empresas"])
 
 
 @router.post("/", response_model=EmpresaResponse)
-def criar_empresa(empresa: EmpresaCreate, db: Session = Depends(get_db)):
+def criar_empresa(empresa: EmpresaCreate, db: Session = Depends(get_db),
+                  current_user=Depends(require_level(1))):
     db_empresa = Empresa(**empresa.model_dump())
     db.add(db_empresa)
     db.commit()
@@ -19,12 +21,14 @@ def criar_empresa(empresa: EmpresaCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/", response_model=List[EmpresaResponse])
-def listar_empresas(db: Session = Depends(get_db)):
+def listar_empresas(db: Session = Depends(get_db),
+                    current_user=Depends(require_level(1))):
     return db.query(Empresa).all()
 
 
 @router.get("/{empresa_id}", response_model=EmpresaResponse)
-def buscar_empresa(empresa_id: int, db: Session = Depends(get_db)):
+def buscar_empresa(empresa_id: int, db: Session = Depends(get_db),
+                   current_user=Depends(require_level(1))):
     empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first()
     if not empresa:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
@@ -32,7 +36,8 @@ def buscar_empresa(empresa_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{empresa_id}", response_model=EmpresaResponse)
-def atualizar_empresa(empresa_id: int, dados: EmpresaCreate, db: Session = Depends(get_db)):
+def atualizar_empresa(empresa_id: int, dados: EmpresaCreate, db: Session = Depends(get_db),
+                      current_user=Depends(require_level(1))):
     empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first()
     if not empresa:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
@@ -44,7 +49,8 @@ def atualizar_empresa(empresa_id: int, dados: EmpresaCreate, db: Session = Depen
 
 
 @router.delete("/{empresa_id}")
-def deletar_empresa(empresa_id: int, db: Session = Depends(get_db)):
+def deletar_empresa(empresa_id: int, db: Session = Depends(get_db),
+                    current_user=Depends(require_level(1))):
     empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first()
     if not empresa:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")

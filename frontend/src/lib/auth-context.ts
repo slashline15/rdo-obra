@@ -7,6 +7,8 @@ interface User {
   role: string;
   obra_id: number | null;
   email: string | null;
+  nivel_acesso: number;
+  pode_aprovar_diario: boolean;
 }
 
 export interface AuthContextType {
@@ -16,6 +18,7 @@ export interface AuthContextType {
   logout: () => void;
   isAdmin: boolean;
   isEngenheiro: boolean;
+  canApproveDiario: boolean;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);

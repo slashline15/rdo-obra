@@ -7,10 +7,11 @@ from sqlalchemy import (
     ForeignKey, JSON, Enum as SAEnum, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
-from datetime import datetime, date
+from datetime import date
 import enum
 
 from app.database import Base
+from app.core.time import utc_now
 
 
 # === Enums ===
@@ -78,7 +79,7 @@ class Empresa(Base):
     logo = Column(String(500))
     template_pdf = Column(String(100), default="rdo_default.html")
     config = Column(JSON, default={})  # cores, layout, campos extras
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     obras = relationship("Obra", back_populates="empresa")
 
@@ -96,13 +97,17 @@ class Obra(Base):
     data_fim_prevista = Column(Date)
     status = Column(String(20), default="ativa")
     config = Column(JSON, default={})  # configurações específicas da obra
-    usuario_admin = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
+    usuario_admin = Column(
+        Integer,
+        ForeignKey("usuarios.id", use_alter=True, name="fk_obras_usuario_admin"),
+        nullable=True,
+    )
 
     # Horário padrão do expediente (HH:MM) — override diário via Expediente
     hora_inicio_padrao = Column(String(5), default="07:00")
     hora_termino_padrao = Column(String(5), default="17:00")
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     empresa = relationship("Empresa", back_populates="obras")
     admin = relationship("Usuario", foreign_keys=[usuario_admin])
@@ -130,10 +135,14 @@ class Usuario(Base):
     email = Column(String(255), nullable=True, unique=True)
     senha_hash = Column(String(255), nullable=True)
     role = Column(String(20), default="estagiario")
+    nivel_acesso = Column(Integer, nullable=False, default=3)
+    pode_aprovar_diario = Column(Boolean, default=False)
+    registro_profissional = Column(String(255), nullable=True)
+    empresa_vinculada = Column(String(255), nullable=True)
     ativo = Column(Boolean, default=True)
     canal_preferido = Column(String(20), default="whatsapp")  # whatsapp, telegram
     telegram_chat_id = Column(String(50))  # para envio direto no Telegram
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     obra = relationship("Obra", back_populates="usuarios", foreign_keys=[obra_id])
 
@@ -178,8 +187,8 @@ class Atividade(Base):
     observacoes = Column(Text)
     registrado_por = Column(String(255))
     texto_original = Column(Text)  # fala original do usuário
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     obra = relationship("Obra", back_populates="atividades")
     atividade_pai = relationship("Atividade", remote_side=[id])
@@ -198,7 +207,7 @@ class AtividadeHistorico(Base):
     status_novo = Column(String(20), nullable=False)
     motivo = Column(Text)  # ex: "Chuva", "Material pendente"
     registrado_por = Column(String(255))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     atividade = relationship("Atividade", back_populates="historico")
 
@@ -215,7 +224,7 @@ class DiaImprodutivo(Base):
     clima_id = Column(Integer, ForeignKey("clima.id"), nullable=True)  # se causado por clima
     impacto = Column(Text)  # descrição do impacto
     horas_perdidas = Column(Float)  # horas efetivamente perdidas
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     obra = relationship("Obra", back_populates="dias_improdutivos")
     clima_ref = relationship("Clima")
@@ -239,7 +248,7 @@ class Expediente(Base):
     motivo = Column(Text)  # ex: "concretagem estendida", "recuperar atraso"
     registrado_por = Column(String(255))
     texto_original = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     obra = relationship("Obra", back_populates="expedientes")
 
@@ -279,7 +288,7 @@ class Efetivo(Base):
     observacoes = Column(Text)
     registrado_por = Column(String(255))
     texto_original = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     obra = relationship("Obra", back_populates="efetivo")
 
@@ -306,7 +315,7 @@ class Anotacao(Base):
 
     registrado_por = Column(String(255))
     texto_original = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     obra = relationship("Obra", back_populates="anotacoes")
 
@@ -330,7 +339,7 @@ class Material(Base):
     observacoes = Column(Text)
     registrado_por = Column(String(255))
     texto_original = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     obra = relationship("Obra", back_populates="materiais")
 
@@ -350,7 +359,7 @@ class Equipamento(Base):
     observacoes = Column(Text)
     registrado_por = Column(String(255))
     texto_original = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     obra = relationship("Obra", back_populates="equipamentos")
 
@@ -384,7 +393,7 @@ class Clima(Base):
     dia_improdutivo = Column(Boolean, default=False)  # flag legado — mantido por compatibilidade
     observacoes = Column(Text)
     texto_original = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     obra = relationship("Obra", back_populates="climas")
 
@@ -406,7 +415,7 @@ class Foto(Base):
     atividade_id = Column(Integer, ForeignKey("atividades.id"), nullable=True)  # foto vinculada a atividade
     registrado_por = Column(String(255))
     texto_original = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     obra = relationship("Obra", back_populates="fotos")
 
@@ -422,8 +431,8 @@ class SolicitacaoCadastro(Base):
     status = Column(String(20), nullable=False, default="pendente")  # pendente, aprovado, rejeitado
     admin_decisor_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
     observacao = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     obra = relationship("Obra", back_populates="solicitacoes_cadastro")
 
@@ -447,12 +456,16 @@ class DiarioDia(Base):
     aprovado_em = Column(DateTime, nullable=True)
     observacao_aprovacao = Column(Text, nullable=True)
     pdf_path = Column(String(500), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deletado_em = Column(DateTime, nullable=True)
+    deletado_por_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
+    motivo_exclusao = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     obra = relationship("Obra")
     submetido_por = relationship("Usuario", foreign_keys=[submetido_por_id])
     aprovado_por = relationship("Usuario", foreign_keys=[aprovado_por_id])
+    deletado_por = relationship("Usuario", foreign_keys=[deletado_por_id])
 
     __table_args__ = (
         UniqueConstraint("obra_id", "data", name="uq_diario_dia"),
@@ -473,7 +486,7 @@ class AuditLog(Base):
     valor_anterior = Column(Text, nullable=True)
     valor_novo = Column(Text, nullable=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     usuario = relationship("Usuario")
 
@@ -496,7 +509,32 @@ class Alerta(Base):
     resolvido_por_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
     resolvido_em = Column(DateTime, nullable=True)
     dados_contexto = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     obra = relationship("Obra")
     resolvido_por = relationship("Usuario")
+
+
+class ConviteAcesso(Base):
+    __tablename__ = "convites_acesso"
+
+    id = Column(Integer, primary_key=True, index=True)
+    obra_id = Column(Integer, ForeignKey("obras.id"), nullable=True)
+    email = Column(String(255), nullable=False)
+    telefone = Column(String(20), nullable=True)
+    role = Column(String(50), nullable=False, default="encarregado")
+    nivel_acesso = Column(Integer, nullable=False, default=3)
+    pode_aprovar_diario = Column(Boolean, default=False)
+    cargo = Column(String(255), nullable=True)
+    token_hash = Column(String(64), nullable=False, unique=True)
+    status = Column(String(20), nullable=False, default="pendente")
+    request_metadata = Column(JSON, default={})
+    criado_por_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    usado_por_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
+    expira_em = Column(DateTime, nullable=False)
+    usado_em = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+
+    obra = relationship("Obra")
+    criado_por = relationship("Usuario", foreign_keys=[criado_por_id])
+    usado_por = relationship("Usuario", foreign_keys=[usado_por_id])

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.core.auth import get_current_user
+from app.core.permissions import ensure_obra_access
 from app.models import AuditLog, Usuario
 
 router = APIRouter(prefix="/auditoria", tags=["Auditoria"])
@@ -17,6 +18,7 @@ def listar_auditoria(obra_id: int, data_ref: date,
                      db: Session = Depends(get_db),
                      current_user: Usuario = Depends(get_current_user)):
     """Lista alterações de um dia, com filtros opcionais por tabela e registro."""
+    ensure_obra_access(current_user, obra_id, required_level=2)
     query = db.query(AuditLog).filter(
         AuditLog.obra_id == obra_id, AuditLog.data_ref == data_ref
     )

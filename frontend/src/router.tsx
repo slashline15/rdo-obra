@@ -7,6 +7,8 @@ import {
 } from "@tanstack/react-router";
 import Layout from "@/components/layout";
 import LoginPage from "@/pages/login";
+import InviteAcceptPage from "@/pages/invite-accept";
+import DocsPage from "@/pages/docs";
 import ObrasPage from "@/pages/obras";
 import DiarioPage from "@/pages/diario";
 import DashboardPage from "@/pages/dashboard";
@@ -24,6 +26,12 @@ const loginRoute = createRoute({
   component: LoginPage,
 });
 
+const inviteAcceptRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/convite/$token",
+  component: InviteAcceptPage,
+});
+
 // Authenticated layout wrapper
 const authLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -37,6 +45,20 @@ const authLayoutRoute = createRoute({
     if (!localStorage.getItem("token")) {
       throw redirect({ to: "/login" });
     }
+  },
+});
+
+const docsRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/docs",
+  component: DocsPage,
+});
+
+const ajudaRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/ajuda",
+  beforeLoad: () => {
+    throw redirect({ to: "/docs" });
   },
 });
 
@@ -79,7 +101,8 @@ const indexRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  authLayoutRoute.addChildren([indexRoute, obrasRoute, diarioRoute, dashboardRoute, usuariosRoute]),
+  inviteAcceptRoute,
+  authLayoutRoute.addChildren([indexRoute, obrasRoute, diarioRoute, dashboardRoute, usuariosRoute, docsRoute, ajudaRoute]),
 ]);
 
 export const router = createRouter({ routeTree });

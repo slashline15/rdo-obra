@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "@tanstack/react-router";
-import { format, addDays, subDays, parseISO } from "date-fns";
+import { format, addDays, startOfMonth, subDays, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   ChevronLeft,
@@ -24,12 +24,14 @@ import {
   Trash2,
   Plus,
   X,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
-import { apiGetBlob, apiGetText, apiPostBlob } from "@/lib/api";
+import { apiGetBlob, apiGetText, apiPost, apiPostBlob } from "@/lib/api";
 import {
   usePainel,
+  useObras,
   useTransicaoDiario,
   useResolverAlerta,
   useUpdateEfetivo,
@@ -45,9 +47,13 @@ import {
   useAddMaterial,
   useAddAnotacao,
   useAuditoria,
+  useExcluirDiario,
+  useLixeiraDiario,
+  useRestaurarDiario,
   type PainelData,
   type AuditLogItem,
   type AlertaItem,
+  type DeletedDiarioItem,
   type EfetivoItem,
   type MaterialItem,
   type AnotacaoItem,
@@ -654,16 +660,22 @@ function EmptyState() {
 export default function DiarioPage() {
   const { obraId, data } = useParams({ strict: false }) as { obraId: string; data: string };
   const navigate = useNavigate();
-  const { isAdmin, isEngenheiro } = useAuth();
+  const { isAdmin, isEngenheiro, canApproveDiario } = useAuth();
 
   const obraIdNum = Number(obraId);
   const { data: painel, isLoading, error } = usePainel(obraIdNum, data);
   const dateInputRef = useRef<HTMLInputElement>(null);
   const [editMode, setEditMode] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashObraId, setTrashObraId] = useState<number | null>(obraIdNum);
+  const [trashStart, setTrashStart] = useState(format(startOfMonth(parseISO(data)), "yyyy-MM-dd"));
+  const [trashEnd, setTrashEnd] = useState(data);
 
   const transicao = useTransicaoDiario(obraIdNum, data);
   const resolverAlerta = useResolverAlerta(obraIdNum, data);
+  const excluirDiario = useExcluirDiario(obraIdNum, data);
+  const restaurarDiario = useRestaurarDiario(obraIdNum, data);
   const updateEfetivo = useUpdateEfetivo(obraIdNum, data);
   const updateAtividade = useUpdateAtividade(obraIdNum, data);
   const updateMaterial = useUpdateMaterial(obraIdNum, data);
@@ -677,9 +689,16 @@ export default function DiarioPage() {
   const addMaterial = useAddMaterial(obraIdNum, data);
   const addAnotacao = useAddAnotacao(obraIdNum, data);
   const auditoria = useAuditoria(obraIdNum, data);
+  const { data: obras } = useObras();
+  const lixeira = useLixeiraDiario({
+    obraId: trashObraId,
+    dataInicio: trashStart,
+    dataFim: trashEnd,
+  }, isAdmin && showTrash);
 
   const isAprovado = painel?.diario.status === "aprovado";
-  const canEdit = !isAprovado && isEngenheiro;
+  const isDeleted = !!painel?.diario.deletado_em;
+  const canEdit = !isAprovado && !isDeleted && isEngenheiro;
 
   function navDate(offset: number) {
     const newDate = format(
@@ -740,6 +759,44 @@ export default function DiarioPage() {
       triggerDownload(blob, `rdo-${obraIdNum}-${data}.pdf`);
       toast.success("PDF baixado");
     } catch (err) { toast.error(err instanceof Error ? err.message : "Erro"); }
+  }
+
+  async function handleDeleteDiario() {
+    const motivo = window.prompt("Motivo da exclusão lógica do diário:", "Ocultado para auditoria");
+    if (motivo === null) return;
+    try {
+      await excluirDiario.mutateAsync({ motivo: motivo.trim() || undefined });
+      toast.success("Diário movido para a lixeira do admin");
+      setEditMode(false);
+      setShowTrash(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro");
+    }
+  }
+
+  async function handleRestoreCurrentDiario() {
+    try {
+      await restaurarDiario.mutateAsync();
+      toast.success("Diário restaurado");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro");
+    }
+  }
+
+  async function handleRestoreFromTrash(item: DeletedDiarioItem) {
+    try {
+      if (item.data === data) {
+        await restaurarDiario.mutateAsync();
+        toast.success("Diário restaurado");
+      } else {
+        await apiPost(`/diario/${item.obra_id}/${item.data}/restaurar`);
+        toast.success("Diário restaurado");
+        void lixeira.refetch();
+        navigate({ to: "/obras/$obraId/diario/$data", params: { obraId, data: item.data } });
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro");
+    }
   }
 
   if (isLoading) {
@@ -820,6 +877,25 @@ export default function DiarioPage() {
             </Button>
           )}
 
+          {isAdmin && !isDeleted && (
+            <Button size="sm" variant="destructive" className="gap-2" onClick={() => void handleDeleteDiario()} disabled={excluirDiario.isPending}>
+              <Trash2 className="h-4 w-4" />
+              Lixeira
+            </Button>
+          )}
+          {isAdmin && isDeleted && (
+            <Button size="sm" variant="outline" className="gap-2" onClick={() => void handleRestoreCurrentDiario()} disabled={restaurarDiario.isPending}>
+              <RotateCcw className="h-4 w-4" />
+              Restaurar
+            </Button>
+          )}
+          {isAdmin && (
+            <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowTrash(!showTrash)}>
+              <History className="h-4 w-4" />
+              {showTrash ? "Fechar lixeira" : "Lixeira"}
+            </Button>
+          )}
+
           <Button size="sm" variant="outline" className="gap-2" onClick={() => void handlePreviewHtml()}>
             <Eye className="h-4 w-4" />
             Visualizar
@@ -838,13 +914,13 @@ export default function DiarioPage() {
               Submeter
             </Button>
           )}
-          {painel.diario.status === "em_revisao" && isAdmin && (
+          {painel.diario.status === "em_revisao" && canApproveDiario && (
             <>
               <Button size="sm" variant="outline" onClick={() => handleTransicao("rejeitar")} disabled={transicao.isPending}>Rejeitar</Button>
               <Button size="sm" onClick={() => handleTransicao("aprovar")} disabled={transicao.isPending}>Aprovar</Button>
             </>
           )}
-          {painel.diario.status === "aprovado" && isAdmin && (
+          {painel.diario.status === "aprovado" && canApproveDiario && (
             <Button size="sm" variant="outline" onClick={() => handleTransicao("reabrir")} disabled={transicao.isPending}>Reabrir</Button>
           )}
           {painel.diario.status === "reaberto" && isEngenheiro && (
@@ -874,6 +950,13 @@ export default function DiarioPage() {
         </div>
       )}
 
+      {isDeleted && (
+        <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300 flex items-center gap-2">
+          <Trash2 className="h-4 w-4 shrink-0" />
+          Diário ocultado para níveis 2 e 3. Ele segue disponível apenas para auditoria do admin até ser restaurado.
+        </div>
+      )}
+
       {/* Alertas */}
       {alertasAtivos.length > 0 && (
         <div className="space-y-2">
@@ -886,6 +969,62 @@ export default function DiarioPage() {
               onResolve={() => void runMutationWithToast(() => resolverAlerta.mutateAsync(alerta.id), "Alerta resolvido")} />
           ))}
         </div>
+      )}
+
+      {isAdmin && showTrash && (
+        <SectionCard title="Lixeira do Admin" icon={<Trash2 className="h-4 w-4 text-red-400" />} count={lixeira.data?.length}>
+          {lixeira.isLoading ? (
+            <div className="h-24 rounded-lg bg-muted animate-pulse" />
+          ) : !lixeira.data?.length ? (
+            <p className="text-sm text-muted-foreground">Nenhum diário ocultado nesta obra.</p>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 md:grid-cols-[minmax(0,1fr)_170px_170px]">
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Obra</span>
+                  <select className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={trashObraId ?? ""} onChange={(e) => setTrashObraId(e.target.value ? Number(e.target.value) : null)}>
+                    {obras?.map((obra) => (
+                      <option key={obra.id} value={obra.id}>{obra.nome}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Início</span>
+                  <input className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" type="date" value={trashStart} onChange={(e) => setTrashStart(e.target.value)} />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Fim</span>
+                  <input className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" type="date" value={trashEnd} onChange={(e) => setTrashEnd(e.target.value)} />
+                </label>
+              </div>
+              {lixeira.data.map((item) => (
+                <div key={item.id} className="flex items-start justify-between gap-3 rounded-lg border px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">
+                      {new Date(`${item.data}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {item.motivo_exclusao || "Sem motivo informado"}
+                    </p>
+                    {item.deletado_em && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        ocultado em {new Date(item.deletado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <Button size="sm" variant="outline" onClick={() => navigate({ to: "/obras/$obraId/diario/$data", params: { obraId, data: item.data } })}>
+                      Abrir
+                    </Button>
+                    <Button size="sm" onClick={() => void handleRestoreFromTrash(item)}>
+                      Restaurar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionCard>
       )}
 
       {/* Content grid */}

@@ -1,152 +1,130 @@
-# RDO Digital — Diário de Obra por Voz e Painel Web
+# RDO Digital
 
-Sistema de registro de Relatório Diário de Obra (RDO) com backend FastAPI, painel web em React e integrações por mensagem. O projeto já possui fluxo web funcional para dashboard, diário da obra, workflow de aprovação e exportação HTML/PDF.
+Plataforma de Relatório Diário de Obra com backend em FastAPI, painel web em React e integrações por mensageria. O sistema já opera com autenticação, níveis de acesso, convites tokenizados, workflow de aprovação do diário, trilha de auditoria e exclusão lógica com lixeira administrativa.
 
----
+## Visão geral
 
-## Stack
+Hoje o projeto está organizado em dois blocos principais:
 
-| Componente | Tecnologia |
-|---|---|
-| Backend | FastAPI (Python 3.13) |
-| Frontend | React + Vite + TypeScript |
-| Banco | PostgreSQL + SQLAlchemy |
-| LLM (intent) | Ollama — `qwen2.5:7b-instruct` |
-| Transcrição | OpenAI Whisper API (`whisper-1`) |
-| Telegram | Bot API oficial |
-| WhatsApp | Evolution API (stub) |
+- Backend `FastAPI` para autenticação, regras de negócio, auditoria, geração de RDO e integrações.
+- Frontend `React + Vite + TypeScript` para operação diária, dashboard, gestão de usuários e consulta da Wiki interna.
+
+O ciclo principal já coberto pelo produto é:
+
+1. Usuário autenticado entra no painel.
+2. Acesso é limitado por nível e por obra.
+3. O diário é preenchido com efetivo, atividades, materiais, anotações, clima e fotos.
+4. O diário segue para revisão, aprovação e eventual reabertura.
+5. Toda mudança crítica fica registrada para rastreabilidade.
+
+## Arquitetura atual
+
+### Backend
+
+- `app/main.py`: composição da API.
+- `app/models.py`: modelos SQLAlchemy.
+- `app/routes/`: rotas por domínio.
+- `app/core/`: autenticação, permissões, configuração e orquestração.
+- `app/services/`: PDF, auditoria, relation engine, transcrição e intent.
+- `migrations/`: versionamento de schema com Alembic.
+
+### Frontend
+
+- `frontend/src/pages/`: páginas do painel.
+- `frontend/src/hooks/`: consumo da API e mutações.
+- `frontend/src/lib/`: autenticação, providers e utilitários.
+- `frontend/src/content/wiki/`: arquivos Markdown carregados pela rota `/docs`.
+
+## Tecnologias
+
+| Camada | Tecnologias |
+| --- | --- |
+| Backend | FastAPI, SQLAlchemy 2, Alembic, Pydantic 2 |
+| Banco de dados | PostgreSQL |
+| Frontend | React 19, Vite, TypeScript, TanStack Router, TanStack Query |
 | PDF | WeasyPrint + Jinja2 |
+| IA e processamento | Ollama, Whisper API, relation engine |
+| Mensageria | Telegram Bot API, Evolution API (base/stub) |
+| Testes | Pytest |
 
----
+## Níveis de acesso
 
-## Estrutura do projeto
+O sistema adota três níveis operacionais:
 
-```
-rdo-obra/
-├── app/
-│   ├── adapters/
-│   │   ├── base.py               # Interface BaseAdapter
-│   │   ├── telegram.py           # Adapter Telegram Bot API
-│   │   └── whatsapp.py           # Adapter Evolution API (stub)
-│   ├── core/
-│   │   ├── config.py             # Settings via pydantic-settings + .env
-│   │   ├── orchestrator.py       # Ponto central: msg → classifica → registra
-│   │   ├── relations.py          # Relation Engine: impactos cruzados
-│   │   └── types.py              # IncomingMessage, OutgoingMessage, enums
-│   ├── routes/
-│   │   ├── atividades.py
-│   │   ├── efetivo.py
-│   │   ├── materiais.py
-│   │   ├── equipamentos.py
-│   │   ├── clima.py
-│   │   ├── anotacoes.py
-│   │   ├── fotos.py
-│   │   ├── obras.py
-│   │   ├── empresas.py
-│   │   ├── usuarios.py
-│   │   ├── rdo.py                # Geração de RDO (JSON + HTML preview)
-│   │   ├── telegram_webhook.py
-│   │   └── whatsapp_webhook.py
-│   ├── services/
-│   │   ├── intent.py             # Classificação via Ollama
-│   │   ├── transcription.py      # Whisper API
-│   │   └── pdf.py                # Geração de PDF
-│   ├── models.py                 # SQLAlchemy models (12 tabelas)
-│   ├── database.py               # Engine + SessionLocal + init_db()
-│   ├── main.py                   # Entry point FastAPI
-│   └── seed.py                   # Dados de teste
-├── docs/
-│   ├── ARCHITECTURE.md
-│   └── ISSUES.md
-├── templates/
-│   └── rdo_default.html          # Template HTML para PDF
-├── .env.example                  # Template de configuração
-└── requirements.txt
-```
+- **Nível 1 - Admin Geral**: visão de todas as obras, gestão de usuários, convites, auditoria e lixeira administrativa.
+- **Nível 2 - Co-responsável**: atua dentro de uma obra específica, pode revisar registros e aprovar diário quando houver delegação.
+- **Nível 3 - Operacional**: alimenta o diário e consulta informações da própria obra.
 
----
+Além do login, toda autorização combina:
 
-## Banco de dados — 12 tabelas
+- nível do usuário;
+- vínculo com `obra_id`;
+- regras de delegação, como aprovação de diário.
 
-```
-empresas
-  └── obras
-        ├── usuarios               # identificados por telefone/chat_id
-        ├── atividades             # INICIADA → EM_ANDAMENTO → CONCLUIDA
-        │     └── atividade_historico
-        ├── efetivo
-        ├── anotacoes              # manuais + geradas pelo Relation Engine
-        ├── materiais
-        ├── equipamentos
-        ├── clima
-        │     └── dias_improdutivos
-        └── fotos
-```
+## Segurança e governança já implementadas
 
----
+- JWT para autenticação do painel.
+- Convites com token, expiração e aceite ativo do usuário.
+- Bootstrap legado bloqueado por token explícito de instalação.
+- Escopo por obra validado nas rotas sensíveis.
+- Soft delete do diário com restauração e auditoria.
+- Registro de alterações para eventos críticos do fluxo do diário.
 
-## Fluxo de uma mensagem
+## Wiki interna
 
-```
-[Telegram/WhatsApp] → adapter.parse_incoming()
-    → IncomingMessage (canal, telefone, tipo, texto, audio_path)
-    → Orchestrator.processar()
-        → identifica usuário pelo telefone/chat_id
-        → se áudio: transcription.transcribe_audio() → texto
-        → intent.classify_intent() via Ollama → {intent, confidence, data}
-        → se confidence < 0.6: pede reformulação
-        → registra no módulo correto
-        → RelationEngine verifica impactos cruzados
-        → OutgoingMessage → adapter.send_message()
-```
+O painel já possui a rota `/docs` com a base institucional em Markdown. Ela documenta:
 
----
+- visão geral do sistema;
+- níveis de acesso;
+- soft delete;
+- fluxo do RDO;
+- uso de IA;
+- mapa de dados;
+- convites e permissões.
 
-## Setup
+Essa Wiki é a fonte única de verdade para alinhar produto, operação e arquitetura antes dos próximos módulos.
 
-### Pré-requisitos
+## Como rodar localmente
 
-- Python 3.13+
-- PostgreSQL
-- [Ollama](https://ollama.ai) com `qwen2.5:7b-instruct` rodando localmente
-- Conta OpenAI (para Whisper)
-- Bot do Telegram criado via [@BotFather](https://t.me/botfather)
-
-### 1. Configurar variáveis de ambiente
-
-```bash
-cp .env.example .env
-# editar .env com suas chaves
-```
-
-### 2. Banco de dados
-
-```bash
-sudo pg_ctlcluster <versao> main start
-sudo -u postgres psql -c "CREATE USER rdo WITH PASSWORD 'rdo';"
-sudo -u postgres psql -c "CREATE DATABASE rdo_digital OWNER rdo;"
-```
-
-### 3. Instalar dependências
+### 1. Backend
 
 ```bash
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
 ```
 
-### 4. Seed + API
+Configure o `.env` com pelo menos:
+
+- `DATABASE_URL`
+- `JWT_SECRET`
+- credenciais de mensageria e IA, quando aplicável
+
+### 2. Banco e migrations
+
+```bash
+alembic upgrade head
+```
+
+Se quiser dados de demonstração:
 
 ```bash
 venv/bin/python -m scripts.seed_demo
+```
+
+### 3. Subir a API
+
+```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
-Swagger em `http://localhost:8000/docs`
+API e Swagger:
 
-Para popular massa retroativa com mais controle, veja [RETRO_SEED_GUIDE.md](/home/lexkaliking/.openclaw/workspace/rdo-obra/docs/RETRO_SEED_GUIDE.md).
+- `http://localhost:8000`
+- `http://localhost:8000/docs`
 
-### 5. Frontend
+### 4. Frontend
 
 ```bash
 cd frontend
@@ -154,43 +132,42 @@ npm install
 npm run dev
 ```
 
-App web em `http://localhost:5173`
+Painel web:
 
-### 6. Registrar webhook do Telegram (ngrok)
+- `http://localhost:5173`
+
+## Qualidade e validação
+
+Principais comandos de verificação:
 
 ```bash
-ngrok http 8000
-curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
-  -d '{"url": "https://<ngrok_url>/telegram/webhook"}'
+./venv/bin/pytest -q --capture=no
+cd frontend && npm run lint -- --max-warnings=0
+cd frontend && npm run build
 ```
 
----
+## Estado atual do produto
 
-## Status do MVP
+Já implementado:
 
-| Módulo | Status |
-|---|---|
-| Models + banco PostgreSQL | Implementado |
-| Seed com dados retroativos e fotos fake | Implementado |
-| Intent classifier (Ollama) | Implementado |
-| Transcription (Whisper API) | Implementado |
-| Orchestrator | Implementado |
-| Relation Engine | Implementado |
-| Adapter Telegram | Implementado |
-| CRUD routes (todas as entidades) | Implementado |
-| Geração RDO (HTML preview + PDF) | Implementado |
-| Adapter WhatsApp (Evolution API) | Stub — não funcional |
-| Dashboard web | Implementado |
-| Autenticação (JWT/token) | Implementado |
-| Testes automatizados | Implementado parcialmente |
-| Deploy (Docker + VPS) | Não implementado |
+- autenticação e sessão web;
+- níveis de acesso e escopo por obra;
+- gestão de convites;
+- dashboard e painel por obra;
+- fluxo do diário com submissão, aprovação, rejeição e reabertura;
+- PDF e exportação do RDO;
+- lixeira administrativa com restauração;
+- helper interno em Markdown.
 
-Ver `docs/ISSUES.md` para pendências técnicas detalhadas.
+Em definição para o próximo ciclo:
 
-Para uma leitura técnica orientada a produto (em linguagem acessível), veja `docs/REVISAO_COMPLETA_MVP.md`.
+- cronograma;
+- curva S;
+- financeiro;
+- integrações externas estruturadas.
 
----
+## Documentação complementar
 
-## Contribuindo
-
-Este é um projeto em desenvolvimento ativo. Para reportar bugs ou sugerir melhorias, abra uma issue.
+- [Arquitetura técnica](docs/ARCHITECTURE.md)
+- [Guia de seed retroativa](docs/RETRO_SEED_GUIDE.md)
+- [Revisão técnica anterior](docs/REVISAO_COMPLETA_MVP.md)

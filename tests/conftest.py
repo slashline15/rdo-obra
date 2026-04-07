@@ -24,6 +24,7 @@ from app.models import (
     Atividade,
     AtividadeStatus,
     Clima,
+    ConviteAcesso,
     DiarioDia,
     DiarioStatus,
     DiaImprodutivo,
@@ -42,6 +43,7 @@ from app.routes import (
     diario,
     efetivo,
     materiais,
+    usuarios,
     obras,
     painel,
     servicos,
@@ -67,6 +69,7 @@ def build_test_app(db_session) -> FastAPI:
     app.include_router(auditoria.router, prefix="/api")
     app.include_router(dashboard.router, prefix="/api")
     app.include_router(obras.router, prefix="/api")
+    app.include_router(usuarios.router, prefix="/api")
     app.include_router(servicos.router, prefix="/api")
     app.include_router(efetivo.router, prefix="/api")
     app.include_router(anotacoes.router, prefix="/api")
@@ -106,6 +109,8 @@ def seeded_data(db_session):
         email="admin@obra.com",
         senha_hash=hash_password("senha123"),
         role="admin",
+        nivel_acesso=1,
+        pode_aprovar_diario=True,
         ativo=True,
     )
     engenheiro = Usuario(
@@ -114,9 +119,19 @@ def seeded_data(db_session):
         email="engenheira@obra.com",
         senha_hash=hash_password("senha123"),
         role="engenheiro",
+        nivel_acesso=2,
         ativo=True,
     )
-    db_session.add_all([admin, engenheiro])
+    operacional = Usuario(
+        nome="Encarregado Campo",
+        telefone="5511999990003",
+        email="encarregado@obra.com",
+        senha_hash=hash_password("senha123"),
+        role="encarregado",
+        nivel_acesso=3,
+        ativo=True,
+    )
+    db_session.add_all([admin, engenheiro, operacional])
     db_session.flush()
 
     obra = Obra(
@@ -131,6 +146,28 @@ def seeded_data(db_session):
 
     admin.obra_id = obra.id
     engenheiro.obra_id = obra.id
+    operacional.obra_id = obra.id
+
+    outra_obra = Obra(
+        nome="Obra Secundária",
+        endereco="Av. Secundária, 200",
+        responsavel="Eng. Secundário",
+        status="ativa",
+    )
+    db_session.add(outra_obra)
+    db_session.flush()
+
+    engenheiro_outra_obra = Usuario(
+        nome="Engenheiro Externo",
+        telefone="5511999990004",
+        email="externo@obra.com",
+        senha_hash=hash_password("senha123"),
+        role="engenheiro",
+        nivel_acesso=2,
+        obra_id=outra_obra.id,
+        ativo=True,
+    )
+    db_session.add(engenheiro_outra_obra)
 
     data_ref = date(2026, 4, 5)
     atividade = Atividade(
@@ -190,7 +227,10 @@ def seeded_data(db_session):
     db_session.commit()
     db_session.refresh(admin)
     db_session.refresh(engenheiro)
+    db_session.refresh(operacional)
     db_session.refresh(obra)
+    db_session.refresh(outra_obra)
+    db_session.refresh(engenheiro_outra_obra)
     db_session.refresh(atividade)
     db_session.refresh(efetivo_item)
     db_session.refresh(diario)
@@ -198,7 +238,10 @@ def seeded_data(db_session):
     return {
         "admin": admin,
         "engenheiro": engenheiro,
+        "operacional": operacional,
         "obra": obra,
+        "outra_obra": outra_obra,
+        "engenheiro_outra_obra": engenheiro_outra_obra,
         "data_ref": data_ref,
         "atividade": atividade,
         "efetivo": efetivo_item,

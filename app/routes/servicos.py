@@ -12,9 +12,10 @@ from app.models import Atividade, AtividadeStatus
 from app.schemas import AtividadeUpdate
 from app.core.auth import get_current_user
 from app.core.diary_lock import check_diary_editable
+from app.core.permissions import ensure_obra_access, resolve_obra_scope, scope_query_to_user
 from app.services.audit import log_changes
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class AtividadeCreate(BaseModel):
@@ -45,18 +46,19 @@ class AtividadeResponse(BaseModel):
     observacoes: Optional[str]
     registrado_por: Optional[str]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 router = APIRouter(prefix="/atividades", tags=["Atividades"])
 
 
 @router.post("/", response_model=AtividadeResponse)
-def criar_atividade(ativ: AtividadeCreate, db: Session = Depends(get_db)):
+def criar_atividade(ativ: AtividadeCreate, db: Session = Depends(get_db),
+                    current_user=Depends(get_current_user)):
     data = ativ.model_dump()
     if not data.get("data_inicio"):
         data["data_inicio"] = date.today()
+    data["obra_id"] = resolve_obra_scope(current_user, data.get("obra_id"), require_explicit=True)
     db_ativ = Atividade(**data, status=AtividadeStatus.INICIADA)
     db.add(db_ativ)
     db.commit()
@@ -69,11 +71,13 @@ def listar_atividades(
     obra_id: int = None,
     status: str = None,
     data_ref: date = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    query = db.query(Atividade)
-    if obra_id:
-        query = query.filter(Atividade.obra_id == obra_id)
+    query = scope_query_to_user(db.query(Atividade), Atividade, current_user)
+    scoped_obra_id = resolve_obra_scope(current_user, obra_id, require_explicit=False)
+    if scoped_obra_id:
+        query = query.filter(Atividade.obra_id == scoped_obra_id)
     if status:
         query = query.filter(Atividade.status == status)
     if data_ref:
@@ -86,13 +90,15 @@ def listar_atividades(
 
 
 @router.get("/rdo/{obra_id}/{data_ref}")
-def atividades_para_rdo(obra_id: int, data_ref: date, db: Session = Depends(get_db)):
+def atividades_para_rdo(obra_id: int, data_ref: date, db: Session = Depends(get_db),
+                        current_user=Depends(get_current_user)):
     """
     Retorna atividades organizadas para o RDO:
     - Iniciadas: data_inicio == data_ref
     - Em Andamento: data_inicio < data_ref AND (data_fim_real is null OR data_fim_real > data_ref)
     - Concluídas: data_fim_real == data_ref
     """
+    ensure_obra_access(current_user, obra_id, required_level=3)
     iniciadas = db.query(Atividade).filter(
         Atividade.obra_id == obra_id,
         Atividade.data_inicio == data_ref
@@ -124,10 +130,12 @@ def atividades_para_rdo(obra_id: int, data_ref: date, db: Session = Depends(get_
 
 
 @router.get("/{atividade_id}", response_model=AtividadeResponse)
-def buscar_atividade(atividade_id: int, db: Session = Depends(get_db)):
+def buscar_atividade(atividade_id: int, db: Session = Depends(get_db),
+                     current_user=Depends(get_current_user)):
     ativ = db.query(Atividade).filter(Atividade.id == atividade_id).first()
     if not ativ:
         raise HTTPException(status_code=404, detail="Atividade não encontrada")
+    ensure_obra_access(current_user, ativ.obra_id, required_level=3)
     return ativ
 
 
@@ -137,6 +145,7 @@ def atualizar_atividade(atividade_id: int, dados: AtividadeUpdate, db: Session =
     ativ = db.query(Atividade).filter(Atividade.id == atividade_id).first()
     if not ativ:
         raise HTTPException(status_code=404, detail="Atividade não encontrada")
+    ensure_obra_access(current_user, ativ.obra_id, required_level=2)
     check_diary_editable(db, ativ.obra_id, ativ.data_inicio)
     updates = dados.model_dump(exclude_unset=True)
     # Converter status string para enum
@@ -155,13 +164,15 @@ def atualizar_atividade(atividade_id: int, dados: AtividadeUpdate, db: Session =
 
 
 @router.put("/{atividade_id}/concluir")
-def concluir_atividade(atividade_id: int, db: Session = Depends(get_db)):
+def concluir_atividade(atividade_id: int, db: Session = Depends(get_db),
+                       current_user=Depends(get_current_user)):
     """Marca atividade como concluída e dispara Relation Engine."""
     from app.core.relations import RelationEngine
 
     ativ = db.query(Atividade).filter(Atividade.id == atividade_id).first()
     if not ativ:
         raise HTTPException(status_code=404, detail="Atividade não encontrada")
+    ensure_obra_access(current_user, ativ.obra_id, required_level=2)
 
     relations = RelationEngine(db)
     result = relations.processar_conclusao_atividade(ativ)
@@ -169,10 +180,13 @@ def concluir_atividade(atividade_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/{atividade_id}")
-def deletar_atividade(atividade_id: int, db: Session = Depends(get_db)):
+def deletar_atividade(atividade_id: int, db: Session = Depends(get_db),
+                      current_user=Depends(get_current_user)):
     ativ = db.query(Atividade).filter(Atividade.id == atividade_id).first()
     if not ativ:
         raise HTTPException(status_code=404, detail="Atividade não encontrada")
+    ensure_obra_access(current_user, ativ.obra_id, required_level=2)
+    check_diary_editable(db, ativ.obra_id, ativ.data_inicio)
     db.delete(ativ)
     db.commit()
     return {"detail": "Atividade removida"}

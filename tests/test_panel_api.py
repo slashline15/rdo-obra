@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from app.models import AuditLog, DiarioDia, DiarioStatus
+from app.models import AuditLog, ConviteAcesso, DiarioDia, DiarioStatus
 
 
 def test_login_with_email_and_me_endpoint(client, seeded_data):
@@ -139,3 +139,166 @@ def test_obras_requires_authentication_and_admin_for_mutation(client, seeded_dat
     )
     assert como_admin.status_code == 200
     assert como_admin.json()["nome"] == "Nova Obra"
+
+
+def test_bootstrap_is_blocked_without_installation_token(client):
+    response = client.post(
+        "/api/auth/bootstrap",
+        params={"email": "root@obra.com", "senha": "senha123", "bootstrap_token": "qualquer"},
+    )
+    assert response.status_code == 403
+    assert "desativado" in response.json()["detail"]
+
+
+def test_users_endpoint_requires_authentication(client):
+    response = client.get("/api/usuarios/")
+    assert response.status_code == 401
+
+
+def test_user_cannot_access_another_obra_panel(client, seeded_data, auth_headers):
+    response = client.get(
+        f"/api/painel/{seeded_data['outra_obra'].id}/{seeded_data['data_ref'].isoformat()}",
+        headers=auth_headers(seeded_data["engenheiro"]),
+    )
+    assert response.status_code == 403
+    assert "outra obra" in response.json()["detail"]
+
+
+def test_invite_flow_creates_operational_user(client, db_session, seeded_data, auth_headers):
+    create = client.post(
+        "/api/auth/invites",
+        json={
+            "email": "novo@obra.com",
+            "obra_id": seeded_data["obra"].id,
+            "role": "encarregado",
+            "nivel_acesso": 3,
+            "cargo": "Técnico de Campo",
+        },
+        headers=auth_headers(seeded_data["admin"]),
+    )
+    assert create.status_code == 200
+    payload = create.json()
+    token = payload["token"]
+    assert payload["invite"]["nivel_acesso"] == 3
+
+    inspect = client.get(f"/api/auth/invites/{token}")
+    assert inspect.status_code == 200
+    assert inspect.json()["email"] == "novo@obra.com"
+
+    accept = client.post(
+        "/api/auth/invites/accept",
+        json={
+            "token": token,
+            "nome": "Novo Técnico",
+            "senha": "senha123",
+            "telefone": "5511999990099",
+            "registro_profissional": "CRT-0099",
+        },
+    )
+    assert accept.status_code == 200
+    assert accept.json()["usuario"]["obra_id"] == seeded_data["obra"].id
+    assert accept.json()["usuario"]["nivel_acesso"] == 3
+
+    convite = db_session.query(ConviteAcesso).filter(ConviteAcesso.email == "novo@obra.com").first()
+    assert convite is not None
+    assert convite.status == "aceito"
+
+
+def test_admin_can_reissue_and_revoke_invite(client, seeded_data, auth_headers):
+    create = client.post(
+        "/api/auth/invites",
+        json={
+            "email": "pendente@obra.com",
+            "obra_id": seeded_data["obra"].id,
+            "role": "encarregado",
+            "nivel_acesso": 3,
+        },
+        headers=auth_headers(seeded_data["admin"]),
+    )
+    assert create.status_code == 200
+    payload = create.json()
+    invite_id = payload["invite"]["id"]
+    original_token = payload["token"]
+
+    reissue = client.post(
+        f"/api/auth/invites/{invite_id}/reissue",
+        headers=auth_headers(seeded_data["admin"]),
+    )
+    assert reissue.status_code == 200
+    assert reissue.json()["token"] != original_token
+    assert reissue.json()["invite"]["status"] == "pendente"
+
+    revoke = client.post(
+        f"/api/auth/invites/{invite_id}/revoke",
+        headers=auth_headers(seeded_data["admin"]),
+    )
+    assert revoke.status_code == 200
+    assert revoke.json()["status"] == "revogado"
+
+
+def test_admin_can_soft_delete_and_restore_diario(client, seeded_data, auth_headers):
+    obra = seeded_data["obra"]
+    data_ref = seeded_data["data_ref"]
+
+    delete_response = client.request(
+        "DELETE",
+        f"/api/diario/{obra.id}/{data_ref.isoformat()}",
+        json={"motivo": "Auditoria interna"},
+        headers=auth_headers(seeded_data["admin"]),
+    )
+    assert delete_response.status_code == 200
+    assert delete_response.json()["motivo_exclusao"] == "Auditoria interna"
+
+    denied = client.get(
+        f"/api/painel/{obra.id}/{data_ref.isoformat()}",
+        headers=auth_headers(seeded_data["engenheiro"]),
+    )
+    assert denied.status_code == 404
+
+    trash = client.get(
+        f"/api/diario/lixeira/obra/{obra.id}",
+        headers=auth_headers(seeded_data["admin"]),
+    )
+    assert trash.status_code == 200
+    assert len(trash.json()) == 1
+
+    restore = client.post(
+        f"/api/diario/{obra.id}/{data_ref.isoformat()}/restaurar",
+        headers=auth_headers(seeded_data["admin"]),
+    )
+    assert restore.status_code == 200
+    assert restore.json()["deletado_em"] is None
+
+    visible_again = client.get(
+        f"/api/painel/{obra.id}/{data_ref.isoformat()}",
+        headers=auth_headers(seeded_data["engenheiro"]),
+    )
+    assert visible_again.status_code == 200
+
+
+def test_admin_can_filter_trash_by_period_and_obra(client, seeded_data, auth_headers):
+    obra = seeded_data["obra"]
+    data_ref = seeded_data["data_ref"]
+
+    client.request(
+        "DELETE",
+        f"/api/diario/{obra.id}/{data_ref.isoformat()}",
+        json={"motivo": "Filtro obra principal"},
+        headers=auth_headers(seeded_data["admin"]),
+    )
+    client.request(
+        "DELETE",
+        f"/api/diario/{seeded_data['outra_obra'].id}/2026-04-04",
+        json={"motivo": "Filtro obra secundária"},
+        headers=auth_headers(seeded_data["admin"]),
+    )
+
+    filtered = client.get(
+        f"/api/diario/lixeira?obra_id={obra.id}&data_inicio=2026-04-05&data_fim=2026-04-05",
+        headers=auth_headers(seeded_data["admin"]),
+    )
+    assert filtered.status_code == 200
+    data = filtered.json()
+    assert len(data) == 1
+    assert data[0]["obra_id"] == obra.id
+    assert data[0]["data"] == data_ref.isoformat()
