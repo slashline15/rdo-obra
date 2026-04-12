@@ -253,8 +253,8 @@ export default function UsuariosPage() {
                   <span className="font-medium">Obra</span>
                   <select className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm" value={effectiveObraId ?? ""} onChange={(e) => setObraId(e.target.value ? Number(e.target.value) : null)}>
                     <option value="">Sem obra vinculada</option>
-                    {obras?.map((obra) => (
-                      <option key={obra.id} value={obra.id}>{obra.nome}</option>
+                    {obras?.map((obras) => (
+                      <option key={obras.id} value={obras.id}>{obras.nome}</option>
                     ))}
                   </select>
                 </label>

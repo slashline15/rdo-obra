@@ -71,6 +71,8 @@ class TelegramAdapter(BaseAdapter):
             raw_data=raw_data
         )
 
+    _TIMEOUT = httpx.Timeout(15.0, connect=10.0)
+
     async def send_message(self, msg: OutgoingMessage) -> bool:
         """Envia mensagem de texto (com botões opcionais)."""
         payload: dict = {
@@ -93,42 +95,54 @@ class TelegramAdapter(BaseAdapter):
                 "inline_keyboard": inline_keyboard
             }
 
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(f"{self.base_url}/sendMessage", json=payload)
-            return resp.status_code == 200
+        try:
+            async with httpx.AsyncClient(timeout=self._TIMEOUT) as client:
+                resp = await client.post(f"{self.base_url}/sendMessage", json=payload)
+                return resp.status_code == 200
+        except Exception:
+            return False
 
     async def answer_callback(self, callback_query_id: str) -> bool:
         """Responde callback query (remove loading do botão)."""
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{self.base_url}/answerCallbackQuery",
-                json={"callback_query_id": callback_query_id}
-            )
-            return resp.status_code == 200
+        try:
+            async with httpx.AsyncClient(timeout=self._TIMEOUT) as client:
+                resp = await client.post(
+                    f"{self.base_url}/answerCallbackQuery",
+                    json={"callback_query_id": callback_query_id}
+                )
+                return resp.status_code == 200
+        except Exception:
+            return False
 
     async def send_message_raw(self, chat_id: str, text: str) -> bool:
         """Envia mensagem simples por chat_id (sem OutgoingMessage)."""
         payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(f"{self.base_url}/sendMessage", json=payload)
-            return resp.status_code == 200
+        try:
+            async with httpx.AsyncClient(timeout=self._TIMEOUT) as client:
+                resp = await client.post(f"{self.base_url}/sendMessage", json=payload)
+                return resp.status_code == 200
+        except Exception:
+            return False
 
     async def send_document(self, telefone: str, file_path: str, caption: str | None = None) -> bool:
         """Envia PDF ou documento."""
-        async with httpx.AsyncClient() as client:
-            with open(file_path, "rb") as f:
-                resp = await client.post(
-                    f"{self.base_url}/sendDocument",
-                    data={"chat_id": telefone, "caption": caption or ""},
-                    files={"document": (os.path.basename(file_path), f)}
-                )
-                return resp.status_code == 200
+        try:
+            async with httpx.AsyncClient(timeout=self._TIMEOUT) as client:
+                with open(file_path, "rb") as f:
+                    resp = await client.post(
+                        f"{self.base_url}/sendDocument",
+                        data={"chat_id": telefone, "caption": caption or ""},
+                        files={"document": (os.path.basename(file_path), f)}
+                    )
+                    return resp.status_code == 200
+        except Exception:
+            return False
 
     async def download_media(self, media_id: str, save_path: str) -> str:
         """Baixa arquivo do Telegram."""
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=self._TIMEOUT) as client:
             # Obter file_path
             resp = await client.get(f"{self.base_url}/getFile", params={"file_id": media_id})
             file_data = resp.json()
@@ -145,9 +159,12 @@ class TelegramAdapter(BaseAdapter):
 
     async def setup_webhook(self, webhook_url: str):
         """Configura webhook do bot."""
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{self.base_url}/setWebhook",
-                json={"url": f"{webhook_url}/telegram/webhook"}
-            )
-            return resp.json()
+        try:
+            async with httpx.AsyncClient(timeout=self._TIMEOUT) as client:
+                resp = await client.post(
+                    f"{self.base_url}/setWebhook",
+                    json={"url": f"{webhook_url}/telegram/webhook"}
+                )
+                return resp.json()
+        except Exception as e:
+            return {"ok": False, "error": str(e)}

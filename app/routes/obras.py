@@ -16,6 +16,7 @@ def _require_adminish(current_user) -> None:
         raise HTTPException(status_code=403, detail="Acesso negado. Necessário: admin")
 
 
+@router.post("", response_model=ObraResponse)
 @router.post("/", response_model=ObraResponse)
 def criar_obra(
     obra: ObraCreate,
@@ -30,6 +31,7 @@ def criar_obra(
     return db_obra
 
 
+@router.get("", response_model=List[ObraResponse])
 @router.get("/", response_model=List[ObraResponse])
 def listar_obras(
     status: str = None,

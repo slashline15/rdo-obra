@@ -111,6 +111,8 @@ class WhatsAppAdapter(BaseAdapter):
             raw_data=raw_data
         )
 
+    _TIMEOUT = httpx.Timeout(15.0, connect=10.0)
+
     async def send_message(self, msg: OutgoingMessage) -> bool:
         """Envia mensagem de texto via Evolution API."""
         texto = self._render_menu(msg.texto, msg.botoes)
@@ -118,13 +120,16 @@ class WhatsAppAdapter(BaseAdapter):
             "number": msg.telefone,
             "text": texto
         }
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{self.api_url}/message/sendText/{self.instance}",
-                headers=self.headers,
-                json=payload
-            )
-            return resp.status_code == 200
+        try:
+            async with httpx.AsyncClient(timeout=self._TIMEOUT) as client:
+                resp = await client.post(
+                    f"{self.api_url}/message/sendText/{self.instance}",
+                    headers=self.headers,
+                    json=payload
+                )
+                return resp.status_code == 200
+        except Exception:
+            return False
 
     async def send_document(self, telefone: str, file_path: str, caption: str | None = None) -> bool:
         """Envia documento (PDF) via Evolution API."""
@@ -139,36 +144,45 @@ class WhatsAppAdapter(BaseAdapter):
             "fileName": os.path.basename(file_path),
             "caption": caption or ""
         }
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{self.api_url}/message/sendMedia/{self.instance}",
-                headers=self.headers,
-                json=payload
-            )
-            return resp.status_code == 200
+        try:
+            async with httpx.AsyncClient(timeout=self._TIMEOUT) as client:
+                resp = await client.post(
+                    f"{self.api_url}/message/sendMedia/{self.instance}",
+                    headers=self.headers,
+                    json=payload
+                )
+                return resp.status_code == 200
+        except Exception:
+            return False
 
     async def download_media(self, media_id: str, save_path: str) -> str:
         """Baixa mídia via Evolution API."""
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{self.api_url}/chat/getBase64FromMediaMessage/{self.instance}",
-                headers=self.headers,
-                json={"message": {"key": {"id": media_id}}}
-            )
-            if resp.status_code == 200:
-                import base64
-                data = resp.json()
-                os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                with open(save_path, "wb") as f:
-                    f.write(base64.b64decode(data.get("base64", "")))
-                return save_path
+        try:
+            async with httpx.AsyncClient(timeout=self._TIMEOUT) as client:
+                resp = await client.post(
+                    f"{self.api_url}/chat/getBase64FromMediaMessage/{self.instance}",
+                    headers=self.headers,
+                    json={"message": {"key": {"id": media_id}}}
+                )
+                if resp.status_code == 200:
+                    import base64
+                    data = resp.json()
+                    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                    with open(save_path, "wb") as f:
+                        f.write(base64.b64decode(data.get("base64", "")))
+                    return save_path
+        except Exception:
+            pass
         return ""
 
     async def _download_url(self, url: str, save_path: str) -> str:
         """Baixa arquivo de URL direta."""
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(url)
-            with open(save_path, "wb") as f:
-                f.write(resp.content)
+        try:
+            async with httpx.AsyncClient(timeout=self._TIMEOUT) as client:
+                resp = await client.get(url)
+                with open(save_path, "wb") as f:
+                    f.write(resp.content)
+        except Exception:
+            pass
         return save_path
