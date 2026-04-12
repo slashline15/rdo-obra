@@ -5,6 +5,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://rdo:rdo@postgres:5432/rdo_digital
+      REDIS_URL: redis://redis:6379/0
       OLLAMA_BASE_URL: http://ollama:11434
     ports:
       - "8000:8000"
@@ -14,6 +15,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
 
   postgres:
     image: postgres:16-alpine
@@ -30,6 +33,13 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+
   # Tunnel permanente — só ativo na VPS (descomente e configure)
   # cloudflared:
   #   image: cloudflare/cloudflared:latest
@@ -42,3 +52,4 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:

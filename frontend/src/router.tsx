@@ -8,6 +8,7 @@ import {
 import Layout from "@/components/layout";
 import LoginPage from "@/pages/login";
 import InviteAcceptPage from "@/pages/invite-accept";
+import PresentationPage from "@/pages/presentation";
 import DocsPage from "@/pages/docs";
 import ObrasPage from "@/pages/obras";
 import DiarioPage from "@/pages/diario";
@@ -32,6 +33,12 @@ const inviteAcceptRoute = createRoute({
   component: InviteAcceptPage,
 });
 
+const presentationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/apresentacao",
+  component: PresentationPage,
+});
+
 // Authenticated layout wrapper
 const authLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -43,7 +50,7 @@ const authLayoutRoute = createRoute({
   ),
   beforeLoad: () => {
     if (!localStorage.getItem("token")) {
-      throw redirect({ to: "/login" });
+      throw redirect({ to: "/apresentacao" });
     }
   },
 });
@@ -102,6 +109,7 @@ const indexRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   loginRoute,
   inviteAcceptRoute,
+  presentationRoute,
   authLayoutRoute.addChildren([indexRoute, obrasRoute, diarioRoute, dashboardRoute, usuariosRoute, docsRoute, ajudaRoute]),
 ]);
 

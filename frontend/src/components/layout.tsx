@@ -69,8 +69,6 @@ export default function Layout({ children }: { children: ReactNode }) {
           </div>
           <button className="relative p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors" title="Notificações">
             <Bell className="h-4 w-4" />
-            {/* Badge de notificação */}
-            <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-primary border border-sidebar" />
           </button>
         </div>
 

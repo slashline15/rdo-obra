@@ -12,6 +12,7 @@ import enum
 
 from app.database import Base
 from app.core.time import utc_now
+from app.core.vector import VectorEmbeddingType
 
 
 # === Enums ===
@@ -193,6 +194,22 @@ class Atividade(Base):
     obra = relationship("Obra", back_populates="atividades")
     atividade_pai = relationship("Atividade", remote_side=[id])
     historico = relationship("AtividadeHistorico", back_populates="atividade")
+
+
+class AtividadeEmbedding(Base):
+    __tablename__ = "atividade_embeddings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    obra_id = Column(Integer, ForeignKey("obras.id"), nullable=False, index=True)
+    atividade_id = Column(Integer, ForeignKey("atividades.id"), nullable=False, unique=True)
+    texto_canonico = Column(Text, nullable=False)
+    embedding = Column(VectorEmbeddingType(1024), nullable=True)
+    embedding_model = Column(String(100), nullable=False, default="qwen3-embedding:0.6b")
+    embedding_dim = Column(Integer, nullable=False, default=1024)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    atividade = relationship("Atividade")
 
 
 # === Histórico de Atividade ===
@@ -435,6 +452,23 @@ class SolicitacaoCadastro(Base):
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     obra = relationship("Obra", back_populates="solicitacoes_cadastro")
+
+
+class ConversationState(Base):
+    __tablename__ = "conversation_states"
+
+    id = Column(Integer, primary_key=True, index=True)
+    channel = Column(String(20), nullable=False, index=True)
+    scope_key = Column(String(120), nullable=False, unique=True, index=True)
+    state_type = Column(String(50), nullable=False, index=True)
+    state_token = Column(String(64), nullable=False, unique=True, index=True)
+    payload = Column(JSON, nullable=False, default=dict)
+    text_original = Column(Text, nullable=True)
+    source_message_id = Column(String(120), nullable=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    consumed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 
 # === Diário do Dia ===

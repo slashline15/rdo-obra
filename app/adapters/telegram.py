@@ -15,6 +15,13 @@ class TelegramAdapter(BaseAdapter):
         self.token = settings.telegram_bot_token
         self.base_url = f"https://api.telegram.org/bot{self.token}"
 
+    @staticmethod
+    def _extract_reply_context(message: dict) -> tuple[str | None, str | None]:
+        reply = message.get("reply_to_message", {}) or {}
+        reply_id = reply.get("message_id")
+        reply_text = reply.get("text") or reply.get("caption")
+        return (str(reply_id) if reply_id is not None else None, reply_text)
+
     async def parse_incoming(self, raw_data: dict) -> IncomingMessage:
         """Converte update do Telegram para IncomingMessage."""
         message = raw_data.get("message", {})
@@ -27,6 +34,7 @@ class TelegramAdapter(BaseAdapter):
         audio_path = None
         foto_path = None
         legenda = message.get("caption")
+        reply_to_message_id, reply_to_text = self._extract_reply_context(message)
 
         if "voice" in message or "audio" in message:
             tipo = TipoMensagem.AUDIO
@@ -57,19 +65,24 @@ class TelegramAdapter(BaseAdapter):
             audio_path=audio_path,
             foto_path=foto_path,
             legenda=legenda,
+            message_id=str(message.get("message_id") or ""),
+            reply_to_message_id=reply_to_message_id,
+            reply_to_text=reply_to_text,
             raw_data=raw_data
         )
 
     async def send_message(self, msg: OutgoingMessage) -> bool:
         """Envia mensagem de texto (com botões opcionais)."""
-        payload = {
+        payload: dict = {
             "chat_id": msg.telefone,
             "text": msg.texto,
             "parse_mode": "HTML"
         }
 
         # Adicionar botões inline se houver
-        if msg.botoes:
+        if msg.reply_markup:
+            payload["reply_markup"] = msg.reply_markup
+        elif msg.botoes:
             inline_keyboard = []
             for btn in msg.botoes:
                 inline_keyboard.append([{
@@ -100,7 +113,7 @@ class TelegramAdapter(BaseAdapter):
             resp = await client.post(f"{self.base_url}/sendMessage", json=payload)
             return resp.status_code == 200
 
-    async def send_document(self, telefone: str, file_path: str, caption: str = None) -> bool:
+    async def send_document(self, telefone: str, file_path: str, caption: str | None = None) -> bool:
         """Envia PDF ou documento."""
         async with httpx.AsyncClient() as client:
             with open(file_path, "rb") as f:

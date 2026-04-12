@@ -94,3 +94,4 @@ frontend/dist/
 
 # Static (built frontend copied for serving)
 static/
+docker-compose.yml

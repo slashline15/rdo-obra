@@ -2,10 +2,11 @@
 Tipos base compartilhados entre todos os módulos.
 Qualquer mensagem de qualquer canal é normalizada para IncomingMessage.
 """
-from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional, Literal
 from enum import Enum
+from typing import Literal, Optional
+
+from pydantic import BaseModel, Field
 
 from app.core.time import utc_now
 
@@ -34,7 +35,10 @@ class IncomingMessage(BaseModel):
     audio_path: Optional[str] = None
     foto_path: Optional[str] = None
     legenda: Optional[str] = None
-    timestamp: datetime = utc_now()
+    message_id: Optional[str] = None
+    reply_to_message_id: Optional[str] = None
+    reply_to_text: Optional[str] = None
+    timestamp: datetime = Field(default_factory=utc_now)
     raw_data: Optional[dict] = None  # dados brutos do canal, se precisar
 
 
@@ -51,6 +55,7 @@ class OutgoingMessage(BaseModel):
 
 class IntentType(str, Enum):
     ATIVIDADE = "atividade"
+    EXPEDIENTE = "expediente"
     EFETIVO = "efetivo"
     MATERIAL = "material"
     EQUIPAMENTO = "equipamento"

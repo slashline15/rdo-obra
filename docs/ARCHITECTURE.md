@@ -3,7 +3,7 @@
 ## Princípios
 1. **Modular ao máximo** — cada funcionalidade é um módulo independente
 2. **Modelos locais** — Ollama para classificação, Whisper local para transcrição
-3. **Orquestrador central** — coordena módulos e mantém relações lógicas
+3. **Orquestrador central** — coordena módulos, mantém estado conversacional e mantém relações lógicas
 4. **Multi-canal** — WhatsApp + Telegram via adapter pattern
 5. **PostgreSQL** — desde o início, preparado para escalar
 
@@ -61,9 +61,9 @@
 │    └───────────┬───────────┘                    │
 │                ▼                                │
 │    ┌───────────────────────┐                    │
-│    │     PostgreSQL        │                    │
+│    │ PostgreSQL + Redis    │                    │
 │    │  + pgvector           │                    │
-│    │  (embeddings)         │                    │
+│    │ (estado + embeddings) │                    │
 │    └───────────────────────┘                    │
 │                                                 │
 │    ┌───────────────────────┐                    │
@@ -83,11 +83,12 @@
 3. Orquestrador identifica usuário e obra
 4. Se áudio → STT (Whisper local)
 5. Intent Classifier (Ollama) → identifica categoria + extrai dados
-6. Módulo específico valida e prepara registro
-7. Relation Engine verifica impactos cruzados
-8. Salva no PostgreSQL
-9. Response Formatter gera confirmação
-10. Adapter envia resposta no canal de origem
+6. Se houver dúvida, o estado pendente é salvo em PostgreSQL e espelhado em Redis
+7. Módulo específico valida e prepara registro
+8. Relation Engine verifica impactos cruzados
+9. Salva no PostgreSQL
+10. Response Formatter gera confirmação ou menu de escolha
+11. Adapter envia resposta no canal de origem
 
 ## Lógica de Atividades (Serviços)
 
@@ -103,6 +104,7 @@ INICIADA → EM ANDAMENTO → CONCLUÍDA
 - Entre início e fim, aparece automaticamente como "em andamento" nos RDOs
 - Descrição é redigida tecnicamente pelo LLM e mantida consistente
 - Se dia improdutivo (clima), Relation Engine registra atraso
+- Se a conclusão da atividade estiver ambígua, o orquestrador usa pgvector para escolher ou pedir confirmação
 - Template PDF agrupa: Iniciadas | Em Andamento | Concluídas
 
 ### Exemplo
@@ -134,6 +136,14 @@ atividade.concluida
 
 equipamento.saida
     → verifica se alguma atividade em andamento dependia dele
+
+conversation_states
+    → guarda prompts pendentes, confirmações e seleções de atividade
+    → Redis acelera leitura, PostgreSQL garante persistência
+
+atividade_embeddings
+    → guarda o texto canônico da atividade e o embedding local
+    → pgvector (HNSW + cosine) alimenta a busca semântica de conclusão
 ```
 
 ## Stack de Produção
@@ -145,7 +155,7 @@ equipamento.saida
 | LLM | Ollama (qwen2.5:7b ou similar) | CPU no VPS |
 | STT | whisper.cpp ou Groq | ~grátis |
 | Telegram | Bot API oficial | grátis |
-| WhatsApp | Evolution API (self-hosted) | grátis |
+| WhatsApp | Evolution API (self-hosted, menus textuais) | grátis |
 | PDF | WeasyPrint | — |
 | Dashboard | HTMX + FastAPI | — |
 | VPS | Hetzner ARM 4GB | ~R$ 40/mês |

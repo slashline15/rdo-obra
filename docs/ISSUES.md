@@ -44,12 +44,14 @@
 **Impacto:** Baixo para MVP. Atividades com `atividade_pai_id` não bloqueiam automaticamente.
 
 ### ISSUE-008 — Matching semântico para conclusão de atividade
-**Descrição:** `_concluir_atividade()` usa matching por palavras-chave simples. Frases ambíguas podem concluir a atividade errada.
-**Solução futura:** pgvector + embeddings para busca semântica.
-**Observação:** No teste de 2026-04-03, "alvenaria do térreo foi finalizada" concluiu a atividade de instalações elétricas do térreo — matching por "térreo" sem diferenciar o serviço.
+**Status:** resolvido em 2026-04-11.
+**Descrição anterior:** `_concluir_atividade()` usava matching por palavras-chave simples. Frases ambíguas podiam concluir a atividade errada.
+**Solução aplicada:** `atividade_embeddings` + pgvector + busca semântica com fallback para escolha explícita.
 
 ### ISSUE-009 — Adapter WhatsApp não implementado
-**Descrição:** `app/adapters/whatsapp.py` é um stub. Evolution API requer instância self-hosted.
+**Status:** resolvido em 2026-04-11.
+**Descrição anterior:** `app/adapters/whatsapp.py` era um stub. Evolution API requer instância self-hosted.
+**Solução aplicada:** `WhatsAppAdapter` com webhook canônico em `/whatsapp/webhook`, menus textuais e suporte a reply/quote.
 
 ### ISSUE-010 — Geração de PDF não testada
 **Descrição:** Template HTML existe. WeasyPrint tem dependências de sistema que podem ser problemáticas no WSL2.
@@ -73,14 +75,14 @@
 **Descrição:** Não há interface para revisar, corrigir e aprovar o RDO antes de gerar PDF.
 
 ### ISSUE-016 — Matching de conclusão impreciso (novo)
-**Descrição:** Ao concluir atividade, o sistema busca por palavras-chave simples e pode concluir a atividade errada quando há termos em comum (ex: "térreo" em várias atividades).
-**Evidência:** Teste de 2026-04-03 — "alvenaria do térreo finalizada" concluiu instalações elétricas do térreo.
-**Solução:** Embeddings com pgvector ou score ponderado por TF-IDF dos termos.
+**Status:** resolvido em 2026-04-11.
+**Descrição anterior:** Ao concluir atividade, o sistema buscava por palavras-chave simples e podia concluir a atividade errada quando havia termos em comum.
+**Solução aplicada:** Embeddings com pgvector e menu de escolha explícita quando a confiança não é alta o suficiente.
 
 ### ISSUE-017 — Botão de callback expira se API reiniciar (novo)
-**Descrição:** Textos pendentes para callbacks de botões inline são armazenados em memória (dict). Se a API reiniciar entre a mensagem e o clique no botão, o texto se perde.
-**Impacto:** Baixo — janela de clique é curta.
-**Solução futura:** Migrar para Redis ou tabela temporária no banco.
+**Status:** resolvido em 2026-04-11.
+**Descrição anterior:** Textos pendentes para callbacks de botões inline eram armazenados em memória (dict). Se a API reiniciasse entre a mensagem e o clique, o texto se perdia.
+**Solução aplicada:** `conversation_states` em PostgreSQL com espelho em Redis e consumo idempotente por `state_token`.
 
 ---
 

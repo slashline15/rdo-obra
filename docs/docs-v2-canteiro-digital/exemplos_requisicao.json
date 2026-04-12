@@ -1,0 +1,249 @@
+{
+	"request": {
+		"data_solicitacao": "2026-04-11",
+		"hora_solicitacao": "16:31:00",
+		"id_solicitacao": "<ID_SOLICITACAO>",
+		"data_referencia": "2026-04-11",
+		"usuario_solicitante": {
+			"id_user": "<USER_ID>",
+			"token_autenticacao": "<TOKEN_AUTENTICACAO>",
+			"ativo": true,
+			"funcao": "encarregado",
+			"nome": "Fulano de Tal",
+			"nivel_de_acesso": 3,
+			"obra_id": "<OBRA_ID>",
+			"obra_nome": "Reforma do Edificio X",
+			"solicitacao_autorizado": true
+		},
+		"mensagem": {
+			"id_mensagem": "<ID_MENSAGEM>",
+			"canal": "WhatsApp",
+			"mensagem_tipo_audio": true,
+			"transcricao": "O, hoje de manha choveu pra caramba, parou tudo ate meio-dia. Depois do almoco o pessoal voltou, 12 pedreiro, 8 servente. Terminamos de armar a laje do 3o andar.",
+			"processamento_ia": {
+				"palavras_chave": [
+					"chuva",
+					"parou tudo",
+					"pessoal voltou",
+					"terminamos",
+					"laje do 3o andar"
+				],
+				"sentimento": "Informativo",
+				"categorias": [
+					"clima",
+					"atividade",
+					"efetivo",
+					"observacao"
+				],
+				"atividades_em_andamento": [
+					"ATREX260102-CIVIL-0001",
+					"ATREX260102-CIVIL-0002",
+					"ATREX260102-ELETRICA-0001",
+					"ATREX260102-HIDRAULICA-0001"
+				],
+				"intencao_presumida": "registro de informacoes",
+				"nivel_de_confianca": 0.95
+			},
+			"aprovacao_requisicao": true
+		},
+		"diario_id": "<DIARIO_ID>",
+		"id_registro": "U1408-260411-05",
+		"informacoes": {
+			"informacoes_climaticas": {
+				"clima": {
+					"periodo": {
+						"manha": "chuva",
+						"tarde": "limpo",
+						"noite": "limpo"
+					}
+				},
+				"pluviometrico": {
+					"manha": {
+						"status": "chuva improdutiva",
+						"produtivo": false
+					},
+					"tarde": {
+						"status": "seco produtivo",
+						"produtivo": true
+					},
+					"noite": {
+						"status": "sem expediente",
+						"produtivo": null
+					}
+				},
+				"improdutividade": {
+					"dia_improdutivo": true,
+					"fracao_improdutiva": 0.5,
+					"horas_perdidas": 4,
+					"motivo": "chuva"
+				}
+			},
+			"anotacoes": [
+				{
+					"id": "ANOT001",
+					"tipo": "clima",
+					"impacto": "improdutividade",
+					"prioridade": "alta",
+					"descricao": "Chuva improdutiva na parte da manha. Atividades externas paralisadas.",
+					"gerado_por": "relation_engine",
+					"resolvida": false
+				},
+				{
+					"id": "ANOT002",
+					"tipo": "observacao",
+					"impacto": "informativo",
+					"prioridade": "normal",
+					"descricao": "Atividade 'Armacao de laje do 3o pavimento' concluida dentro do prazo previsto.",
+					"gerado_por": "ia",
+					"resolvida": false
+				}
+			],
+			"atividades": {
+				"ATREX260102-CIVIL-0001": {
+					"descricao": "Armacao de laje do 3o pavimento",
+					"local": "3o pavimento",
+					"etapa": "Estrutura",
+					"equipe": {
+						"tipo": "propria"
+					},
+					"data_inicio_real": "2026-04-02T08:00:00",
+					"data_termino_real": "2026-04-11T17:00:00",
+					"percentual_concluido": 100,
+					"status": "concluida",
+					"observacoes": "Atividade concluida apos a chuva parar.",
+					"cronograma": {
+						"cronograma_tarefa_id": "<FK_CRONOGRAMA_TAREFA>",
+						"data_inicio_prevista": "2026-04-02",
+						"data_termino_previsto": "2026-04-11",
+						"desvio_dias": 0,
+						"caminho_critico": true,
+						"predecessora_id": null
+					}
+				},
+				"ATREX260102-CIVIL-0002": {
+					"descricao": "Fechamento de formas de borda de alcapao",
+					"local": "3o pavimento",
+					"etapa": "Estrutura",
+					"equipe": {
+						"tipo": "propria"
+					},
+					"data_inicio_real": "2026-04-06T08:00:00",
+					"data_termino_previsto": "2026-04-15T17:00:00",
+					"percentual_concluido": 45,
+					"status": "em andamento",
+					"observacoes": "Atividade afetada pela chuva, andamento lento.",
+					"cronograma": {
+						"cronograma_tarefa_id": "<FK_CRONOGRAMA_TAREFA>",
+						"data_inicio_prevista": "2026-04-06",
+						"data_termino_previsto": "2026-04-13",
+						"desvio_dias": 2,
+						"caminho_critico": false,
+						"predecessora_id": "ATREX260102-CIVIL-0001"
+					}
+				},
+				"ATREX260102-ELETRICA-0001": {
+					"descricao": "Instalacao de caixa de passagem eletrica",
+					"local": "3o pavimento",
+					"etapa": "Instalacoes",
+					"equipe": {
+						"tipo": "terceirizada",
+						"empresa": "Eletrica LTDA",
+						"contrato_id": "<FK_CONTRATO>",
+						"responsavel": "Ciclano de Tal"
+					},
+					"data_inicio_real": "2026-04-07T08:00:00",
+					"data_termino_previsto": "2026-04-14T17:00:00",
+					"percentual_concluido": 60,
+					"status": "em andamento",
+					"observacoes": "Atividade afetada pela chuva. Previsao de conclusao atrasada.",
+					"cronograma": {
+						"cronograma_tarefa_id": "<FK_CRONOGRAMA_TAREFA>",
+						"data_inicio_prevista": "2026-04-07",
+						"data_termino_previsto": "2026-04-11",
+						"desvio_dias": 3,
+						"caminho_critico": true,
+						"predecessora_id": null
+					}
+				},
+				"ATREX260102-HIDRAULICA-0001": {
+					"descricao": "Execucao de esperas de descidas hidraulicas",
+					"local": "3o pavimento",
+					"etapa": "Instalacoes",
+					"equipe": {
+						"tipo": "terceirizada",
+						"empresa": "Hidraulica LTDA",
+						"contrato_id": "<FK_CONTRATO>",
+						"responsavel": "Beltrano de Tal"
+					},
+					"data_inicio_real": "2026-04-01T08:00:00",
+					"data_termino_previsto": "2026-04-14T17:00:00",
+					"percentual_concluido": 70,
+					"status": "em andamento",
+					"observacoes": "Atividade afetada pela chuva, andamento lento.",
+					"cronograma": {
+						"cronograma_tarefa_id": "<FK_CRONOGRAMA_TAREFA>",
+						"data_inicio_prevista": "2026-04-01",
+						"data_termino_previsto": "2026-04-13",
+						"desvio_dias": 1,
+						"caminho_critico": false,
+						"predecessora_id": null
+					}
+				}
+			},
+			"efetivo": {
+				"proprio": {
+					"funcoes": {
+						"pedreiro": 12,
+						"servente": 8
+					},
+					"total": 20
+				},
+				"terceirizado": [
+					{
+						"empresa": "Eletrica LTDA",
+						"contrato_id": "<FK_CONTRATO>",
+						"funcoes": {
+							"eletricista": 3,
+							"ajudante": 2
+						},
+						"total": 5
+					},
+					{
+						"empresa": "Hidraulica LTDA",
+						"contrato_id": "<FK_CONTRATO>",
+						"funcoes": {
+							"encanador": 4,
+							"ajudante": 2
+						},
+						"total": 6
+					}
+				],
+				"total_geral": 31
+			},
+			"resumo_cronograma": {
+				"atividades_no_prazo": 1,
+				"atividades_atrasadas": 2,
+				"atividades_adiantadas": 0,
+				"atividades_concluidas_no_dia": 1,
+				"impacto_dia_improdutivo": {
+					"dias_perdidos": 0.5,
+					"atividades_impactadas": [
+						"ATREX260102-CIVIL-0002",
+						"ATREX260102-ELETRICA-0001",
+						"ATREX260102-HIDRAULICA-0001"
+					],
+					"propagacao_caminho_critico": true
+				}
+			}
+		},
+		"resposta": {
+			"data_resposta": "2026-04-11",
+			"hora_resposta": "16:35:00",
+			"id_resposta": "<ID_RESPOSTA>",
+			"canal_resposta": "WhatsApp",
+			"tipo_resposta": "texto",
+			"conteudo_resposta": "Registro recebido e processado.\n\nInformacoes adicionadas ao sistema:\n- Clima: Chuva pela manha, atividades externas paralisadas.\n- Atividade 'Armacao de laje do 3o pavimento' concluida dentro do prazo previsto.\n- Atividades 'Fechamento de formas de borda de alcapao', 'Instalacao de caixa de passagem eletrica' e 'Execucao de esperas de descidas hidraulicas' afetadas pela chuva, andamento lento.\n- Efetivo proprio: 12 pedreiros e 8 serventes.\n- Efetivo terceirizado: Eletrica LTDA (5), Hidraulica LTDA (6).\n- Total geral: 31 trabalhadores."
+		},
+		"mensagem_confirmacao": "Registrado!"
+	}
+}

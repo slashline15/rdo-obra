@@ -6,7 +6,11 @@
 Áudio/Texto → Transcrição (Whisper) → Classificação (Ollama) → Registro (DB) → Resposta
 ```
 
-O bot usa palavras-chave primeiro (sem LLM) para casos óbvios. Quando ambíguo, apresenta botões para o usuário escolher a categoria.
+O bot usa palavras-chave primeiro (sem LLM) para casos óbvios. Quando ambíguo, guarda o estado no banco e pede uma escolha explícita:
+- Telegram mostra botões inline
+- WhatsApp mostra menu numerado para resposta por texto
+
+Para conclusão de atividade, o sistema usa busca semântica com pgvector antes de confirmar o registro.
 
 ---
 
@@ -73,12 +77,18 @@ O bot detecta o período pela mensagem:
 
 ## Comportamento com confiança baixa
 
-Se o bot não tiver certeza da categoria, apresenta botões:
+Se o bot não tiver certeza da categoria, apresenta um menu:
 
 ```
 📋 O que você quer registrar?
-[🏗️ Atividade]  [👷 Efetivo]  [☁️ Clima]
+1. 🏗️ Atividade
+2. ✅ Conclusão
+3. 👷 Efetivo
+4. 📦 Material
+...
 ```
+
+O usuário pode responder com o número ou clicar no botão no Telegram. O estado da escolha fica salvo em PostgreSQL e espelhado em Redis para não se perder se o serviço reiniciar.
 
 ---
 
@@ -95,3 +105,4 @@ Se o bot não tiver certeza da categoria, apresenta botões:
 3. **Clima sem registro = dia produtivo com sol.** Só registre quando houver algo diferente.
 4. **Expediente sem registro = horário padrão da obra.** Só avise quando mudar.
 5. **Efetivo empreiteiro = total por empresa.** Não precisa detalhar funções.
+6. **No WhatsApp, responda com texto.** Menus nativos por botão não são a base final do fluxo.

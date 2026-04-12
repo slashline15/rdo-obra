@@ -4,7 +4,8 @@ Agora com estados: Iniciada → Em Andamento → Concluída
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, cast
+import asyncio
 from datetime import date
 
 from app.database import get_db
@@ -14,6 +15,7 @@ from app.core.auth import get_current_user
 from app.core.diary_lock import check_diary_editable
 from app.core.permissions import ensure_obra_access, resolve_obra_scope, scope_query_to_user
 from app.services.audit import log_changes
+from app.services.activity_semantics import ActivitySemanticSearch
 
 from pydantic import BaseModel, ConfigDict
 
@@ -52,6 +54,20 @@ class AtividadeResponse(BaseModel):
 router = APIRouter(prefix="/atividades", tags=["Atividades"])
 
 
+def _sync_embedding(db: Session, atividade: Atividade):
+    try:
+        coro = ActivitySemanticSearch(db).upsert_activity_embedding(atividade)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(coro)
+        else:
+            loop.create_task(coro)
+    except Exception:
+        # A rota não pode falhar só porque o modelo local de embeddings está indisponível.
+        pass
+
+
 @router.post("/", response_model=AtividadeResponse)
 def criar_atividade(ativ: AtividadeCreate, db: Session = Depends(get_db),
                     current_user=Depends(get_current_user)):
@@ -63,24 +79,25 @@ def criar_atividade(ativ: AtividadeCreate, db: Session = Depends(get_db),
     db.add(db_ativ)
     db.commit()
     db.refresh(db_ativ)
+    _sync_embedding(db, db_ativ)
     return db_ativ
 
 
 @router.get("/", response_model=List[AtividadeResponse])
 def listar_atividades(
-    obra_id: int = None,
-    status: str = None,
-    data_ref: date = None,
+    obra_id: Optional[int] = None,
+    status: Optional[str] = None,
+    data_ref: Optional[date] = None,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     query = scope_query_to_user(db.query(Atividade), Atividade, current_user)
     scoped_obra_id = resolve_obra_scope(current_user, obra_id, require_explicit=False)
-    if scoped_obra_id:
+    if scoped_obra_id is not None:
         query = query.filter(Atividade.obra_id == scoped_obra_id)
     if status:
         query = query.filter(Atividade.status == status)
-    if data_ref:
+    if data_ref is not None:
         # Atividades ativas nesta data (inicio <= data E (fim >= data OU fim é null))
         query = query.filter(
             Atividade.data_inicio <= data_ref,
@@ -135,7 +152,7 @@ def buscar_atividade(atividade_id: int, db: Session = Depends(get_db),
     ativ = db.query(Atividade).filter(Atividade.id == atividade_id).first()
     if not ativ:
         raise HTTPException(status_code=404, detail="Atividade não encontrada")
-    ensure_obra_access(current_user, ativ.obra_id, required_level=3)
+    ensure_obra_access(current_user, cast(int, ativ.obra_id), required_level=3)
     return ativ
 
 
@@ -145,8 +162,8 @@ def atualizar_atividade(atividade_id: int, dados: AtividadeUpdate, db: Session =
     ativ = db.query(Atividade).filter(Atividade.id == atividade_id).first()
     if not ativ:
         raise HTTPException(status_code=404, detail="Atividade não encontrada")
-    ensure_obra_access(current_user, ativ.obra_id, required_level=2)
-    check_diary_editable(db, ativ.obra_id, ativ.data_inicio)
+    ensure_obra_access(current_user, cast(int, ativ.obra_id), required_level=2)
+    check_diary_editable(db, cast(int, ativ.obra_id), cast(date, ativ.data_inicio))
     updates = dados.model_dump(exclude_unset=True)
     # Converter status string para enum
     if "status" in updates and isinstance(updates["status"], str):
@@ -155,11 +172,12 @@ def atualizar_atividade(atividade_id: int, dados: AtividadeUpdate, db: Session =
     # Serializar enums para string antes de logar
     old_str = {k: (v.value if hasattr(v, 'value') else v) for k, v in old.items()}
     new_str = {k: (v.value if hasattr(v, 'value') else v) for k, v in updates.items()}
-    log_changes(db, ativ.obra_id, ativ.data_inicio, "atividades", ativ.id, old_str, new_str, current_user.id)
+    log_changes(db, cast(int, ativ.obra_id), cast(date, ativ.data_inicio), "atividades", cast(int, ativ.id), old_str, new_str, current_user.id)
     for key, value in updates.items():
         setattr(ativ, key, value)
     db.commit()
     db.refresh(ativ)
+    _sync_embedding(db, ativ)
     return ativ
 
 
@@ -172,7 +190,7 @@ def concluir_atividade(atividade_id: int, db: Session = Depends(get_db),
     ativ = db.query(Atividade).filter(Atividade.id == atividade_id).first()
     if not ativ:
         raise HTTPException(status_code=404, detail="Atividade não encontrada")
-    ensure_obra_access(current_user, ativ.obra_id, required_level=2)
+    ensure_obra_access(current_user, cast(int, ativ.obra_id), required_level=2)
 
     relations = RelationEngine(db)
     result = relations.processar_conclusao_atividade(ativ)
@@ -185,8 +203,10 @@ def deletar_atividade(atividade_id: int, db: Session = Depends(get_db),
     ativ = db.query(Atividade).filter(Atividade.id == atividade_id).first()
     if not ativ:
         raise HTTPException(status_code=404, detail="Atividade não encontrada")
-    ensure_obra_access(current_user, ativ.obra_id, required_level=2)
-    check_diary_editable(db, ativ.obra_id, ativ.data_inicio)
+    ensure_obra_access(current_user, cast(int, ativ.obra_id), required_level=2)
+    check_diary_editable(db, cast(int, ativ.obra_id), cast(date, ativ.data_inicio))
+    search = ActivitySemanticSearch(db)
     db.delete(ativ)
     db.commit()
+    search.delete_activity_embedding(atividade_id)
     return {"detail": "Atividade removida"}

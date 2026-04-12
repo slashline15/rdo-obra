@@ -19,13 +19,57 @@ class WhatsAppAdapter(BaseAdapter):
     def headers(self):
         return {"apikey": self.api_key, "Content-Type": "application/json"}
 
+    @staticmethod
+    def _unwrap_message_payload(raw_data: dict) -> tuple[dict, dict, dict]:
+        data = raw_data.get("data", raw_data) or {}
+        if isinstance(data.get("messages"), list) and data["messages"]:
+            payload = data["messages"][0] or {}
+            key = payload.get("key", data.get("key", {})) or {}
+            message_data = payload.get("message", payload) or {}
+        else:
+            key = data.get("key", {}) or {}
+            message_data = data.get("message", {}) or {}
+        return data, key, message_data
+
+    @staticmethod
+    def _extract_reply_context(message: dict) -> tuple[str | None, str | None]:
+        for container_key in ("extendedTextMessage", "imageMessage", "videoMessage", "audioMessage"):
+            container = message.get(container_key, {}) or {}
+            context = container.get("contextInfo", {}) or {}
+            if not context:
+                continue
+            reply_to_id = context.get("stanzaId")
+            quoted = context.get("quotedMessage", {}) or {}
+            reply_text = (
+                quoted.get("conversation")
+                or quoted.get("extendedTextMessage", {}).get("text")
+                or quoted.get("imageMessage", {}).get("caption")
+                or quoted.get("documentMessage", {}).get("caption")
+            )
+            return reply_to_id, reply_text
+        return None, None
+
+    @staticmethod
+    def _render_menu(text: str, botoes: list | None) -> str:
+        if not botoes:
+            return text
+
+        linhas = [text.rstrip(), "", "Opções:"]
+        for indice, botao in enumerate(botoes, start=1):
+            linhas.append(f"{indice}. {botao.get('text', 'Opção')}")
+        linhas.append("")
+        linhas.append("Responda com o número da opção.")
+        return "\n".join(linhas)
+
     async def parse_incoming(self, raw_data: dict) -> IncomingMessage:
         """Converte webhook da Evolution API para IncomingMessage."""
-        data = raw_data.get("data", raw_data)
-        message = data.get("message", {})
-        key = data.get("key", {})
+        data, key, message = self._unwrap_message_payload(raw_data)
 
-        telefone = key.get("remoteJid", "").replace("@s.whatsapp.net", "")
+        remote_jid = key.get("remoteJid", "") or ""
+        participant = key.get("participant")
+        telefone = remote_jid.replace("@s.whatsapp.net", "").replace("@lid", "")
+        if remote_jid.endswith("@g.us") and participant:
+            telefone = participant.replace("@s.whatsapp.net", "")
 
         # Determinar tipo
         tipo = TipoMensagem.TEXTO
@@ -33,6 +77,7 @@ class WhatsAppAdapter(BaseAdapter):
         audio_path = None
         foto_path = None
         legenda = None
+        reply_to_message_id, reply_to_text = self._extract_reply_context(message)
 
         if "audioMessage" in message:
             tipo = TipoMensagem.AUDIO
@@ -60,14 +105,18 @@ class WhatsAppAdapter(BaseAdapter):
             audio_path=audio_path,
             foto_path=foto_path,
             legenda=legenda,
+            message_id=str(key.get("id") or ""),
+            reply_to_message_id=reply_to_message_id,
+            reply_to_text=reply_to_text,
             raw_data=raw_data
         )
 
     async def send_message(self, msg: OutgoingMessage) -> bool:
         """Envia mensagem de texto via Evolution API."""
+        texto = self._render_menu(msg.texto, msg.botoes)
         payload = {
             "number": msg.telefone,
-            "text": msg.texto
+            "text": texto
         }
         async with httpx.AsyncClient() as client:
             resp = await client.post(
@@ -77,7 +126,7 @@ class WhatsAppAdapter(BaseAdapter):
             )
             return resp.status_code == 200
 
-    async def send_document(self, telefone: str, file_path: str, caption: str = None) -> bool:
+    async def send_document(self, telefone: str, file_path: str, caption: str | None = None) -> bool:
         """Envia documento (PDF) via Evolution API."""
         import base64
         with open(file_path, "rb") as f:

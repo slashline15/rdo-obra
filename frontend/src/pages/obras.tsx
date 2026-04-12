@@ -1,13 +1,35 @@
 import { Link } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useObras } from "@/hooks/use-diario";
-import { HardHat, MapPin, ArrowRight, Plus } from "lucide-react";
+import { HardHat, MapPin, ArrowRight, Plus, X } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { apiPost } from "@/lib/api";
+import { toast } from "sonner";
+import { useState } from "react";
 
 export default function ObrasPage() {
   const { data: obras, isLoading } = useObras();
+  const queryClient = useQueryClient();
+  const [showNova, setShowNova] = useState(false);
+  const [nomeNova, setNomeNova] = useState("");
   const hoje = format(new Date(), "yyyy-MM-dd");
   const hojeFormatado = format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR });
+
+  async function handleCriarObra() {
+    if (!nomeNova.trim()) {
+      toast.error("Informe o nome da obra");
+      return;
+    }
+    try {
+      await apiPost("/obras", { nome: nomeNova });
+      setShowNova(false);
+      setNomeNova("");
+      queryClient.invalidateQueries({ queryKey: ["obras"] });
+    } catch (err) {
+      toast.error("Erro ao criar obra");
+    }
+  }
 
   if (isLoading) {
     return (
@@ -33,7 +55,10 @@ export default function ObrasPage() {
           <h1 className="text-2xl font-bold tracking-tight">Obras</h1>
           <p className="text-sm text-muted-foreground mt-1 capitalize">{hojeFormatado}</p>
         </div>
-        <button className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors">
+        <button
+          onClick={() => setShowNova(true)}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
+        >
           <Plus className="h-4 w-4" />
           Nova obra
         </button>
@@ -86,6 +111,47 @@ export default function ObrasPage() {
           </Link>
         ))}
       </div>
+
+      {/* Modal Nova Obra */}
+      {showNova && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Nova obra</h2>
+              <button onClick={() => setShowNova(false)} className="p-1 rounded hover:bg-muted">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Nome da obra</label>
+                <input
+                  type="text"
+                  value={nomeNova}
+                  onChange={(e) => setNomeNova(e.target.value)}
+                  placeholder="Ex: Residencial Parque Verde"
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  autoFocus
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setShowNova(false)}
+                  className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-muted"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCriarObra}
+                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90"
+                >
+                  Criar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

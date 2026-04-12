@@ -96,7 +96,7 @@ def keyword_classify(text: str) -> Optional[dict]:
 # ─── Prompt do LLM ──────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """Você é um classificador de mensagens de diário de obra (RDO).
-Analise a mensagem do trabalhador e classifique em UMA categoria, extraindo dados.
+Analise a mensagem do trabalhador e classifique em UMA categoria, extraindo dados mínimos e fiéis ao texto.
 
 CATEGORIAS VÁLIDAS (use exatamente estes nomes):
 - atividade → início de serviço/atividade nova
@@ -112,6 +112,13 @@ CATEGORIAS VÁLIDAS (use exatamente estes nomes):
 
 RESPONDA APENAS com JSON neste formato exato:
 {"intent": "nome_da_categoria", "confidence": 0.9, "data": {...}}
+
+REGRAS DE DECISÃO:
+- Se existir INTENT_FIXA, use essa categoria como obrigatória.
+- Se a mensagem estiver ambígua, prefira a categoria mais específica para o canteiro.
+- Não invente nomes, quantidades, horários ou empresas que não estejam explícitos.
+- Se não houver dados suficientes para um campo, omita o campo.
+- Nunca responda com texto fora do JSON.
 
 EXEMPLOS:
 
@@ -151,24 +158,39 @@ REGRAS:
 Data de hoje: """ + str(date.today())
 
 
-async def classify_intent(text: str, obra_id: Optional[int] = None) -> dict:
-    """Classifica intenção: primeiro tenta keywords, depois LLM."""
+async def classify_intent(
+    text: str,
+    obra_id: Optional[int] = None,
+    forced_intent: Optional[str] = None,
+) -> dict:
+    """Classifica intenção: primeiro tenta keywords, depois LLM.
+
+    Quando `forced_intent` é informado, ele entra como hint forte no LLM
+    e prevalece na validação final. Isso é usado quando o usuário já escolheu
+    a categoria explicitamente no menu.
+    """
 
     # Pré-filtro por palavras-chave (rápido, sem LLM)
-    kw_result = keyword_classify(text)
+    kw_result = None if forced_intent else keyword_classify(text)
 
     # Se keywords deram match confiante, ainda manda pro LLM para extrair dados
-    # mas já sabemos o intent — o LLM só estrutura
-    hint = None
-    if kw_result and kw_result["confidence"] >= 0.7:
+    # mas já sabemos o intent — o LLM só estrutura.
+    hint = forced_intent
+    if hint is None and kw_result and kw_result["confidence"] >= 0.7:
         hint = kw_result["intent"]
 
     # Chamar LLM
     try:
         llm_result = await _call_ollama(text, hint)
     except Exception:
-        # Ollama offline — usar só keywords
-        if kw_result:
+        # Ollama offline — usar só keywords ou o intent forçado.
+        if forced_intent:
+            llm_result = {
+                "intent": forced_intent,
+                "confidence": kw_result["confidence"] if kw_result else 0.75,
+                "data": {},
+            }
+        elif kw_result:
             llm_result = {"intent": kw_result["intent"], "confidence": kw_result["confidence"], "data": {}}
         else:
             return {"intent": "desconhecido", "confidence": 0, "data": {}}
@@ -177,7 +199,11 @@ async def classify_intent(text: str, obra_id: Optional[int] = None) -> dict:
     valid_intents = {"atividade", "conclusao", "efetivo", "material", "equipamento", "clima", "anotacao", "foto", "consulta", "expediente"}
     llm_intent = llm_result.get("intent", "")
 
-    if llm_intent not in valid_intents:
+    if forced_intent:
+        llm_result["intent"] = forced_intent
+        if "confidence" not in llm_result or llm_result["confidence"] is None:
+            llm_result["confidence"] = 0.75
+    elif llm_intent not in valid_intents:
         if kw_result and kw_result["confidence"] >= 0.5:
             llm_result["intent"] = kw_result["intent"]
             llm_result["confidence"] = kw_result["confidence"]
@@ -276,10 +302,12 @@ def _enrich_clima_data(data: dict, text: str):
 
 async def _call_ollama(text: str, hint: Optional[str] = None) -> dict:
     """Chama Ollama para classificação + extração de dados."""
+    import logging
+    _log = logging.getLogger(__name__)
 
     prompt = text
     if hint:
-        prompt = f"[A categoria é: {hint}] {text}"
+        prompt = f"INTENT_FIXA: {hint}\nMENSAGEM: {text}"
 
     url = f"{settings.ollama_base_url}/api/chat"
 
@@ -293,12 +321,16 @@ async def _call_ollama(text: str, hint: Optional[str] = None) -> dict:
             "format": "json",
             "stream": False,
             "options": {
-                "temperature": 0.1,
-                "num_predict": 512
+                "temperature": 0.0,
+                "num_predict": 384
             }
         })
         response.raise_for_status()
         result = response.json()
 
     content = result.get("message", {}).get("content", "{}")
-    return json.loads(content)
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        _log.warning("ollama_json_parse_error | raw=%r | hint=%r | text=%r", content[:200], hint, text[:80])
+        raise

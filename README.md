@@ -40,11 +40,11 @@ O ciclo principal já coberto pelo produto é:
 | Camada | Tecnologias |
 | --- | --- |
 | Backend | FastAPI, SQLAlchemy 2, Alembic, Pydantic 2 |
-| Banco de dados | PostgreSQL |
+| Banco de dados | PostgreSQL + Redis + pgvector |
 | Frontend | React 19, Vite, TypeScript, TanStack Router, TanStack Query |
 | PDF | WeasyPrint + Jinja2 |
-| IA e processamento | Ollama, Whisper API, relation engine |
-| Mensageria | Telegram Bot API, Evolution API (base/stub) |
+| IA e processamento | Ollama, Whisper API, relation engine, busca semântica |
+| Mensageria | Telegram Bot API, Evolution API (Webhook canônico) |
 | Testes | Pytest |
 
 ## Níveis de acesso

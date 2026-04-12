@@ -1,5 +1,6 @@
-import os
+import asyncio
 import logging
+import os
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -65,9 +66,23 @@ app.include_router(whatsapp_webhook.router)
 
 
 @app.on_event("startup")
-def startup():
+async def startup():
     init_db()
     _check_required_settings()
+    asyncio.create_task(_expire_states_loop())
+
+
+async def _expire_states_loop():
+    """Loop que executa a expiração de estados a cada 15 minutos."""
+    from app.tasks.expire_states import run_expire_states
+    while True:
+        try:
+            await run_expire_states()
+        except Exception as e:
+            logging.getLogger("rdo.expire_states").exception(
+                "Error in expire_states loop: %s", e
+            )
+        await asyncio.sleep(900)  # 15 minutos
 
 
 def _check_required_settings():
@@ -83,7 +98,7 @@ def _check_required_settings():
         log.info("✅ Configuração OK")
 
 
-@app.get("/")
+@app.get("/api/status")
 def root():
     return {
         "app": settings.app_name,
@@ -104,11 +119,20 @@ STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
 if os.path.isdir(STATIC_DIR):
     app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="static-assets")
 
+    # Arquivos estáticos raiz (favicon, icons, etc.)
+    _STATIC_ROOT_FILES = {"favicon.svg", "icons.svg"}
+
     @app.get("/{full_path:path}")
     async def spa_fallback(full_path: str):
         # Não intercepta rotas da API, docs, ou webhooks
         if full_path.startswith(("api/", "docs", "redoc", "openapi", "health")):
             raise HTTPException(404)
+        # Arquivos estáticos da raiz
+        if full_path in _STATIC_ROOT_FILES:
+            f = os.path.join(STATIC_DIR, full_path)
+            if os.path.isfile(f):
+                return FileResponse(f)
+        # SPA — tudo o mais serve o index.html
         index = os.path.join(STATIC_DIR, "index.html")
         if os.path.isfile(index):
             return FileResponse(index)
