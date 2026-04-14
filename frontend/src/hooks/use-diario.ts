@@ -32,6 +32,18 @@ export interface PainelData {
   fotos: FotoItem[];
   expediente: Record<string, unknown> | null;
   alertas: AlertaItem[];
+  timeline: TimelineItem[];
+}
+
+export interface TimelineItem {
+  id: number;
+  ts: string | null;
+  type: string;
+  label: string;
+  desc: string;
+  author: string;
+  file?: string;
+  prioridade?: string;
 }
 
 export interface Atividade {
@@ -383,5 +395,16 @@ export function useRevogarConvite() {
     mutationFn: (inviteId: number) =>
       apiPost<InviteItem>(`/auth/invites/${inviteId}/revoke`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["convites"] }),
+  });
+}
+
+export function useCalendario(obraId: number, dataInicio: string, dataFim: string) {
+  return useQuery({
+    queryKey: ["calendario", obraId, dataInicio, dataFim],
+    queryFn: () =>
+      apiGet<Array<{ data: string; status: string; deletado: boolean }>>(
+        `/painel/calendario/${obraId}?inicio=${dataInicio}&fim=${dataFim}`
+      ),
+    enabled: !!obraId && !!dataInicio && !!dataFim,
   });
 }

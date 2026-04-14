@@ -95,65 +95,22 @@ def keyword_classify(text: str) -> Optional[dict]:
 
 # ─── Prompt do LLM ──────────────────────────────────────────────────
 
-SYSTEM_PROMPT = """Você é um classificador de mensagens de diário de obra (RDO).
-Analise a mensagem do trabalhador e classifique em UMA categoria, extraindo dados mínimos e fiéis ao texto.
+SYSTEM_PROMPT = """Você é o núcleo de inteligência de um Canteiro Digital (RDO).
+Sua missão é processar mensagens de trabalhadores e engenheiros, extraindo múltiplas intenções e dados estruturados com alta precisão (meta > 80% confiança).
 
-CATEGORIAS VÁLIDAS (use exatamente estes nomes):
-- atividade → início de serviço/atividade nova
-- conclusao → atividade em andamento sendo finalizada
-- efetivo → mão de obra presente no dia (própria ou empreiteira)
-- material → entrada, saída ou falta de material
-- equipamento → entrada, saída ou uso de equipamento/máquina
-- clima → condição do tempo e impacto no trabalho
-- anotacao → observação geral, ocorrência, pendência
-- expediente → horário de início e/ou término do dia de trabalho
-- foto → registro fotográfico
-- consulta → pergunta sobre dados já registrados
+MENSAGENS PODEM CONTER VÁRIAS INFORMAÇÕES AO MESMO TEMPO.
 
-RESPONDA APENAS com JSON neste formato exato:
-{"intent": "nome_da_categoria", "confidence": 0.9, "data": {...}}
+CATEGORIAS VÁLIDAS:
+- atividade, conclusao, efetivo, material, equipamento, clima, anotacao, expediente, foto, consulta
 
-REGRAS DE DECISÃO:
-- Se existir INTENT_FIXA, use essa categoria como obrigatória.
-- Se a mensagem estiver ambígua, prefira a categoria mais específica para o canteiro.
-- Não invente nomes, quantidades, horários ou empresas que não estejam explícitos.
-- Se não houver dados suficientes para um campo, omita o campo.
-- Nunca responda com texto fora do JSON.
+REGRAS CRÍTICAS:
+1. USE O CONTEXTO: Você receberá "ATIVIDADES ATIVAS". Se a mensagem diz "terminamos o reboco", use o ID/Descrição da atividade correspondente no campo data.
+2. INFIRA CONTEXTO: Se "parou tudo por causa da chuva", o clima deve ter dia_improdutivo: true.
+3. PRECISÃO: Não invente dados.
+4. TÉCNICO: Converta termos leigos para técnicos de engenharia civil.
 
-EXEMPLOS:
-
-Mensagem: "hoje temos 8 pedreiros e 4 serventes"
-{"intent": "efetivo", "confidence": 0.95, "data": {"registros": [{"tipo": "proprio", "funcao": "pedreiro", "quantidade": 8}, {"tipo": "proprio", "funcao": "servente", "quantidade": 4}]}}
-
-Mensagem: "chegaram 5 pedreiros e 3 serventes da empreiteira Silva e 12 da Elétrica Norte"
-{"intent": "efetivo", "confidence": 0.95, "data": {"registros": [{"tipo": "proprio", "funcao": "pedreiro", "quantidade": 5}, {"tipo": "proprio", "funcao": "servente", "quantidade": 3}, {"tipo": "empreiteiro", "empresa": "Elétrica Norte", "quantidade": 12}]}}
-
-Mensagem: "15 funcionários da Supermix hoje na obra"
-{"intent": "efetivo", "confidence": 0.92, "data": {"registros": [{"tipo": "empreiteiro", "empresa": "Supermix", "quantidade": 15}]}}
-
-Mensagem: "hoje começamos às 7h e vamos até 18h por conta da concretagem"
-{"intent": "expediente", "confidence": 0.95, "data": {"hora_inicio": "07:00", "hora_termino": "18:00", "motivo": "concretagem estendida"}}
-
-Mensagem: "chuva forte a manhã toda, paramos tudo até meio dia"
-{"intent": "clima", "confidence": 0.95, "data": {"periodo": "manhã", "condicao": "chuva", "impacto_trabalho": "paralisação total até meio dia", "dia_improdutivo": true}}
-
-Mensagem: "começamos a concretagem da laje do segundo andar"
-{"intent": "atividade", "confidence": 0.95, "data": {"descricao": "Execução de concretagem da laje do 2º pavimento tipo", "local": "2º pavimento", "etapa": "Estrutura"}}
-
-Mensagem: "terminamos a alvenaria do térreo"
-{"intent": "conclusao", "confidence": 0.9, "data": {"descricao": "alvenaria térreo"}}
-
-Mensagem: "chegaram 200 sacos de cimento, NF 4521"
-{"intent": "material", "confidence": 0.95, "data": {"tipo": "entrada", "material": "cimento", "quantidade": 200, "unidade": "sacos", "nota_fiscal": "4521"}}
-
-REGRAS:
-- Para atividade: reescreva a descrição em linguagem técnica de engenharia civil
-- Para clima: se impediu trabalho, dia_improdutivo = true
-- Para efetivo: sempre use "registros" como array; tipo="proprio" para cargos da empresa, tipo="empreiteiro" para terceiros (nesse caso empresa é obrigatória, funcao pode ser omitida)
-- Para expediente: hora no formato HH:MM (ex: 7h → "07:00"); inclua motivo se mencionado
-- Omita campos não mencionados na mensagem
-- NÃO use "categoria" como valor de intent — use o nome real da categoria
-- confidence deve refletir sua certeza real (0.0 a 1.0)
+RESPONDA APENAS com um JSON contendo uma lista de intenções:
+{"intents": [{"intent": "nome", "confidence": 0.95, "data": {...}}]}
 
 Data de hoje: """ + str(date.today())
 
@@ -162,68 +119,61 @@ async def classify_intent(
     text: str,
     obra_id: Optional[int] = None,
     forced_intent: Optional[str] = None,
+    context: Optional[list] = None,
 ) -> dict:
-    """Classifica intenção: primeiro tenta keywords, depois LLM.
-
-    Quando `forced_intent` é informado, ele entra como hint forte no LLM
-    e prevalece na validação final. Isso é usado quando o usuário já escolheu
-    a categoria explicitamente no menu.
+    """Classifica intenções: suporta múltiplas intenções e contexto de obra.
+    
+    context: lista de atividades em andamento para ajudar a ligar pontos.
     """
 
     # Pré-filtro por palavras-chave (rápido, sem LLM)
     kw_result = None if forced_intent else keyword_classify(text)
-
-    # Se keywords deram match confiante, ainda manda pro LLM para extrair dados
-    # mas já sabemos o intent — o LLM só estrutura.
-    hint = forced_intent
-    if hint is None and kw_result and kw_result["confidence"] >= 0.7:
-        hint = kw_result["intent"]
-
-    # Chamar LLM
+    
+    # Chamar LLM com contexto de atividades se disponível
     try:
-        llm_result = await _call_ollama(text, hint)
+        llm_result = await _call_ollama(text, forced_intent, context)
+        if "intents" not in llm_result:
+            if "intent" in llm_result:
+                llm_result = {"intents": [llm_result]}
+            else:
+                # Fallback keywords
+                if kw_result and kw_result["confidence"] >= 0.5:
+                    llm_result = {"intents": [{"intent": kw_result["intent"], "confidence": kw_result["confidence"], "data": {}}]}
+                else:
+                    llm_result = {"intents": []}
     except Exception:
-        # Ollama offline — usar só keywords ou o intent forçado.
         if forced_intent:
-            llm_result = {
-                "intent": forced_intent,
-                "confidence": kw_result["confidence"] if kw_result else 0.75,
-                "data": {},
-            }
-        elif kw_result:
-            llm_result = {"intent": kw_result["intent"], "confidence": kw_result["confidence"], "data": {}}
+            llm_result = {"intents": [{"intent": forced_intent, "confidence": 0.8, "data": {}}]}
+        elif kw_result and kw_result["confidence"] >= 0.5:
+            llm_result = {"intents": [{"intent": kw_result["intent"], "confidence": kw_result["confidence"], "data": {}}]}
         else:
-            return {"intent": "desconhecido", "confidence": 0, "data": {}}
+            llm_result = {"intents": []}
 
-    # Validar: se o LLM retornou "categoria" ou intent inválido, usar keywords
+    # Validação e Enriquecimento
     valid_intents = {"atividade", "conclusao", "efetivo", "material", "equipamento", "clima", "anotacao", "foto", "consulta", "expediente"}
-    llm_intent = llm_result.get("intent", "")
+    
+    final_intents = []
+    for item in llm_result.get("intents", []):
+        intent_name = item.get("intent")
+        if intent_name in valid_intents:
+            item["confidence"] = float(item.get("confidence") or 0.5)
+            
+            # Enriquecimentos específicos
+            data = item.setdefault("data", {})
+            if obra_id:
+                data["obra_id"] = obra_id
+            
+            if intent_name == "clima":
+                _enrich_clima_data(data, text)
+            
+            final_intents.append(item)
 
-    if forced_intent:
-        llm_result["intent"] = forced_intent
-        if "confidence" not in llm_result or llm_result["confidence"] is None:
-            llm_result["confidence"] = 0.75
-    elif llm_intent not in valid_intents:
-        if kw_result and kw_result["confidence"] >= 0.5:
-            llm_result["intent"] = kw_result["intent"]
-            llm_result["confidence"] = kw_result["confidence"]
-        else:
-            llm_result["intent"] = "desconhecido"
-            llm_result["confidence"] = 0
+    return {
+        "intents": final_intents,
+        "original_text": text,
+        "candidates": kw_result.get("candidates") if not forced_intent and kw_result else []
+    }
 
-    # Adicionar candidatos se keywords detectou ambiguidade
-    if kw_result and "candidates" in kw_result:
-        llm_result["candidates"] = kw_result["candidates"]
-
-    llm_result["original_text"] = text
-    if obra_id:
-        llm_result.setdefault("data", {})["obra_id"] = obra_id
-
-    # Pós-processamento de clima: enriquecer com período e status pluviométrico
-    if llm_result.get("intent") == "clima":
-        _enrich_clima_data(llm_result.setdefault("data", {}), text)
-
-    return llm_result
 
 
 # ─── Enriquecimento de clima ──────────────────────────────────────────
@@ -300,14 +250,19 @@ def _enrich_clima_data(data: dict, text: str):
         )
 
 
-async def _call_ollama(text: str, hint: Optional[str] = None) -> dict:
+async def _call_ollama(text: str, hint: Optional[str] = None, context: Optional[list] = None) -> dict:
     """Chama Ollama para classificação + extração de dados."""
     import logging
     _log = logging.getLogger(__name__)
 
-    prompt = text
+    prompt_parts = []
     if hint:
-        prompt = f"INTENT_FIXA: {hint}\nMENSAGEM: {text}"
+        prompt_parts.append(f"INTENT_FIXA: {hint}")
+    if context:
+        prompt_parts.append(f"ATIVIDADES ATIVAS: {json.dumps(context, ensure_ascii=False)}")
+    
+    prompt_parts.append(f"MENSAGEM: {text}")
+    full_prompt = "\n".join(prompt_parts)
 
     url = f"{settings.ollama_base_url}/api/chat"
 
@@ -316,13 +271,13 @@ async def _call_ollama(text: str, hint: Optional[str] = None) -> dict:
             "model": settings.ollama_model,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": full_prompt}
             ],
             "format": "json",
             "stream": False,
             "options": {
                 "temperature": 0.0,
-                "num_predict": 384
+                "num_predict": 512
             }
         })
         response.raise_for_status()

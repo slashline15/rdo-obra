@@ -4,7 +4,6 @@ import { ptBR } from "date-fns/locale";
 import {
   ChevronLeft,
   ChevronRight,
-  CalendarDays,
   AlertTriangle,
   Users,
   Cloud,
@@ -24,7 +23,6 @@ import {
   Trash2,
   Plus,
   X,
-  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
@@ -638,19 +636,113 @@ function AuditRow({ log }: { log: AuditLogItem }) {
 function AlertCard({ alerta, onResolve }: { alerta: AlertaItem; onResolve: () => void }) {
   const cfg = SEVERITY_CONFIG[alerta.severidade] ?? SEVERITY_CONFIG.baixa;
   return (
-    <div className={`flex items-start gap-3 p-3 rounded-lg border ${cfg.color}`}>
-      {cfg.icon}
+    <div className={`flex items-start gap-4 p-4 rounded-2xl border ${cfg.color} backdrop-blur-sm group`}>
+      <div className="mt-0.5">{cfg.icon}</div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium">{alerta.mensagem}</p>
-        <p className="text-xs text-muted-foreground mt-0.5 capitalize">{alerta.regra.replace(/_/g, " ")}</p>
+        <p className="text-sm font-semibold leading-tight">{alerta.mensagem}</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mt-1">{alerta.regra.replace(/_/g, " ")}</p>
       </div>
-      <Button size="sm" variant="ghost" className="text-xs shrink-0" onClick={onResolve}>Resolver</Button>
+      <Button size="sm" variant="ghost" className="h-8 px-3 text-xs font-bold uppercase tracking-wider hover:bg-background/50" onClick={onResolve}>Resolver</Button>
     </div>
   );
 }
 
 function EmptyState() {
-  return <p className="text-sm text-muted-foreground py-2">Nenhum registro.</p>;
+  return (
+    <div className="flex flex-col items-center justify-center py-10 opacity-20 select-none">
+       <div className="h-10 w-10 border-2 border-dashed rounded-full flex items-center justify-center mb-3">
+          <Plus className="h-5 w-5" />
+       </div>
+       <p className="text-xs font-bold uppercase tracking-widest">Nenhum registro</p>
+    </div>
+  );
+}
+
+function TimelineBlock({ items }: { items: PainelData["timeline"] }) {
+  if (!items.length) return <EmptyState />;
+
+  const typeIcon: Record<string, ReactNode> = {
+    atividade: <Plus className="h-3.5 w-3.5 text-blue-400" />,
+    conclusão: <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />,
+    efetivo: <Users className="h-3.5 w-3.5 text-sky-400" />,
+    material: <Package className="h-3.5 w-3.5 text-amber-400" />,
+    equipamento: <Wrench className="h-3.5 w-3.5 text-gray-400" />,
+    anotação: <FileText className="h-3.5 w-3.5 text-emerald-400" />,
+    foto: <Camera className="h-3.5 w-3.5 text-pink-400" />,
+    clima: <Cloud className="h-3.5 w-3.5 text-sky-400" />,
+  };
+
+  return (
+    <div className="relative space-y-4 before:absolute before:inset-y-0 before:left-[17px] before:w-[1px] before:bg-border/60">
+      {items.map((item, idx) => (
+        <div key={`${item.type}-${item.id}-${idx}`} className="relative pl-10 group">
+          {/* Dot/Icon */}
+          <div className="absolute left-0 top-1 h-[34px] w-[34px] rounded-full border bg-background flex items-center justify-center shadow-sm z-10 group-hover:border-primary/50 transition-colors">
+            {typeIcon[item.type] ?? <Clock className="h-3.5 w-3.5 text-muted-foreground" />}
+          </div>
+
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold tracking-tight">{item.label}</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/50">{item.author}</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{item.desc}</p>
+              {item.type === "foto" && item.file && (
+                <div className="mt-2 h-20 w-32 rounded-lg bg-muted overflow-hidden border">
+                   <img
+                    src={`/api/fotos/arquivo/${encodeURIComponent(item.file)}`}
+                    alt="Miniatura"
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              )}
+            </div>
+            <span className="text-[10px] font-mono font-medium text-muted-foreground bg-muted/30 px-1.5 py-0.5 rounded shrink-0">
+              {item.ts ? format(parseISO(item.ts), "HH:mm") : "--:--"}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SummaryGrid({ painel }: { painel: PainelData }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="rounded-2xl border bg-card/40 p-4 backdrop-blur-sm">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Efetivo Geral</p>
+        <div className="flex items-end gap-2">
+          <span className="text-2xl font-bold tracking-tight">{painel.total_efetivo.geral}</span>
+          <span className="text-xs text-muted-foreground mb-1">colaboradores</span>
+        </div>
+      </div>
+      <div className="rounded-2xl border bg-card/40 p-4 backdrop-blur-sm">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Atividades</p>
+        <div className="flex items-end gap-2">
+          <span className="text-2xl font-bold tracking-tight text-primary">{painel.atividades.concluidas.length}</span>
+          <span className="text-xs text-muted-foreground mb-1">de {painel.atividades.iniciadas.length + painel.atividades.em_andamento.length + painel.atividades.concluidas.length} totais</span>
+        </div>
+      </div>
+      <div className="rounded-2xl border bg-card/40 p-4 backdrop-blur-sm">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Clima Predom.</p>
+        <div className="flex items-end gap-2 text-sky-400">
+          <Cloud className="h-5 w-5 mb-1" />
+          <span className="text-xl font-bold tracking-tight capitalize">{painel.clima[0]?.condicao ?? "—"}</span>
+        </div>
+      </div>
+      <div className="rounded-2xl border bg-card/40 p-4 backdrop-blur-sm">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Alertas</p>
+        <div className="flex items-end gap-2">
+          <span className={`text-2xl font-bold tracking-tight ${painel.alertas.filter(a => !a.resolvido).length > 0 ? "text-amber-500" : "text-muted-foreground/30"}`}>
+            {painel.alertas.filter(a => !a.resolvido).length}
+          </span>
+          <span className="text-xs text-muted-foreground mb-1">pendentes</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ============================================================
@@ -666,8 +758,8 @@ export default function DiarioPage() {
   const { data: painel, isLoading, error } = usePainel(obraIdNum, data);
   const dateInputRef = useRef<HTMLInputElement>(null);
   const [editMode, setEditMode] = useState(false);
-  const [showAudit, setShowAudit] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
+  const [rightPanel, setRightPanel] = useState<"timeline" | "audit">("timeline");
   const [trashObraId, setTrashObraId] = useState<number | null>(obraIdNum);
   const [trashStart, setTrashStart] = useState(format(startOfMonth(parseISO(data)), "yyyy-MM-dd"));
   const [trashEnd, setTrashEnd] = useState(data);
@@ -818,27 +910,44 @@ export default function DiarioPage() {
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-4">
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
         {/* Data + navegação */}
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => navDate(-1)} className="shrink-0">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
+        <div className="flex items-center gap-4">
+          <div className="flex bg-card/80 border rounded-xl overflow-hidden shadow-sm backdrop-blur">
+            <button
+               onClick={() => navDate(-1)}
+               className="p-2 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <div className="px-4 py-2 flex flex-col items-center justify-center min-w-40 border-x bg-background/5 transition-colors">
+              <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{format(parseISO(data), "MMMM", { locale: ptBR })}</span>
+              <span className="text-xl font-bold tracking-tighter">{format(parseISO(data), "dd")}</span>
+            </div>
+             <button
+               onClick={() => navDate(1)}
+               className="p-2 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
 
-          <div>
-            <h1 className="text-xl font-bold">{painel.obra.nome}</h1>
-            <div className="flex items-center gap-2 mt-0.5">
-              <p className="text-sm text-muted-foreground capitalize">
-                {format(parseISO(data), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold tracking-tight">{painel.obra.nome}</h1>
+              <StatusBadge status={painel.diario.status} />
+            </div>
+            <div className="flex items-center gap-2">
+               <p className="text-sm text-muted-foreground capitalize">
+                {format(parseISO(data), "EEEE", { locale: ptBR })}
               </p>
-              {/* Calendar picker — ícone grande e chamativo */}
-              <button
+              <div className="h-1 w-1 rounded-full bg-muted-foreground/30" />
+               <button
                 type="button"
                 onClick={() => dateInputRef.current?.showPicker?.()}
-                className="flex items-center justify-center h-7 w-7 rounded-lg bg-primary/15 border border-primary/25 text-primary hover:bg-primary/25 hover:border-primary/50 hover:scale-105 transition-all"
-                title="Escolher data"
+                className="text-[11px] font-bold uppercase tracking-wider text-primary hover:underline"
               >
-                <CalendarDays className="h-4 w-4" />
+                Mudar data
               </button>
               <input
                 ref={dateInputRef}
@@ -854,167 +963,151 @@ export default function DiarioPage() {
               />
             </div>
           </div>
-
-          <Button variant="ghost" size="icon" onClick={() => navDate(1)} className="shrink-0">
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-
-          <StatusBadge status={painel.diario.status} />
         </div>
 
         {/* Ações */}
-        <div className="flex gap-2 flex-wrap justify-end">
-          {/* Modo edição — botão principal */}
+        <div className="flex gap-2 flex-wrap items-center">
+          {/* Preview buttons em grupo */}
+          <div className="flex items-center bg-card border rounded-lg shadow-sm overflow-hidden mr-2">
+            <button className="p-2.5 hover:bg-muted transition-colors text-muted-foreground" title="Preview" onClick={() => void handlePreviewHtml()}>
+              <Eye className="h-4 w-4" />
+            </button>
+            <div className="w-[1px] h-4 bg-border" />
+            <button className="p-2.5 hover:bg-muted transition-colors text-muted-foreground" title="HTML" onClick={() => void handleExportHtml()}>
+              <FileCode2 className="h-4 w-4" />
+            </button>
+            <div className="w-[1px] h-4 bg-border" />
+            <button className={`p-2.5 hover:bg-muted transition-colors ${!isAprovado ? "opacity-30 cursor-not-allowed" : "text-muted-foreground"}`} title="PDF" onClick={() => void handleExportPdf()} disabled={!isAprovado}>
+              <Download className="h-4 w-4" />
+            </button>
+          </div>
+
           {canEdit && (
             <Button
               size="sm"
               variant={editMode ? "default" : "outline"}
-              className={`gap-2 ${editMode ? "border-primary" : ""}`}
+              className="gap-2 rounded-lg"
               onClick={() => setEditMode(!editMode)}
             >
               {editMode ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
-              {editMode ? "Fechar edição" : "Editar diário"}
+              {editMode ? "Fechar" : "Editar"}
             </Button>
           )}
-
-          {isAdmin && !isDeleted && (
-            <Button size="sm" variant="destructive" className="gap-2" onClick={() => void handleDeleteDiario()} disabled={excluirDiario.isPending}>
-              <Trash2 className="h-4 w-4" />
-              Lixeira
-            </Button>
-          )}
-          {isAdmin && isDeleted && (
-            <Button size="sm" variant="outline" className="gap-2" onClick={() => void handleRestoreCurrentDiario()} disabled={restaurarDiario.isPending}>
-              <RotateCcw className="h-4 w-4" />
-              Restaurar
-            </Button>
-          )}
-          {isAdmin && (
-            <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowTrash(!showTrash)}>
-              <History className="h-4 w-4" />
-              {showTrash ? "Fechar lixeira" : "Lixeira"}
-            </Button>
-          )}
-
-          <Button size="sm" variant="outline" className="gap-2" onClick={() => void handlePreviewHtml()}>
-            <Eye className="h-4 w-4" />
-            Visualizar
-          </Button>
-          <Button size="sm" variant="outline" className="gap-2" onClick={() => void handleExportHtml()}>
-            <FileCode2 className="h-4 w-4" />
-            HTML
-          </Button>
-          <Button size="sm" variant="outline" className="gap-2" onClick={() => void handleExportPdf()} disabled={!isAprovado}>
-            <Download className="h-4 w-4" />
-            PDF
-          </Button>
 
           {painel.diario.status === "rascunho" && isEngenheiro && (
-            <Button size="sm" onClick={() => handleTransicao("submeter")} disabled={transicao.isPending}>
-              Submeter
+            <Button size="sm" className="rounded-lg shadow-md" onClick={() => handleTransicao("submeter")} disabled={transicao.isPending}>
+              Submeter Revisão
             </Button>
           )}
           {painel.diario.status === "em_revisao" && canApproveDiario && (
-            <>
-              <Button size="sm" variant="outline" onClick={() => handleTransicao("rejeitar")} disabled={transicao.isPending}>Rejeitar</Button>
-              <Button size="sm" onClick={() => handleTransicao("aprovar")} disabled={transicao.isPending}>Aprovar</Button>
-            </>
+            <div className="flex gap-1.5">
+              <Button size="sm" variant="outline" className="rounded-lg" onClick={() => handleTransicao("rejeitar")} disabled={transicao.isPending}>Rejeitar</Button>
+              <Button size="sm" className="rounded-lg shadow-md" onClick={() => handleTransicao("aprovar")} disabled={transicao.isPending}>Aprovar RDO</Button>
+            </div>
           )}
           {painel.diario.status === "aprovado" && canApproveDiario && (
-            <Button size="sm" variant="outline" onClick={() => handleTransicao("reabrir")} disabled={transicao.isPending}>Reabrir</Button>
+            <Button size="sm" variant="outline" className="rounded-lg" onClick={() => handleTransicao("reabrir")} disabled={transicao.isPending}>Reabrir</Button>
           )}
-          {painel.diario.status === "reaberto" && isEngenheiro && (
-            <Button size="sm" onClick={() => handleTransicao("submeter")} disabled={transicao.isPending}>Re-submeter</Button>
+
+          {isAdmin && (
+            <div className="flex gap-1.5 ml-2 border-l pl-3">
+               {!isDeleted && (
+                <button
+                  onClick={() => void handleDeleteDiario()}
+                  className="p-2 rounded-lg transition-colors hover:bg-red-500/10 text-muted-foreground hover:text-red-500"
+                  title="Mover para lixeira"
+                >
+                  <Trash2 className="h-5 w-5" />
+                </button>
+               )}
+               <button
+                 onClick={() => setShowTrash(!showTrash)}
+                 className={`p-2 rounded-lg transition-colors ${showTrash ? "bg-red-500/10 text-red-500" : "hover:bg-muted text-muted-foreground"}`}
+                 title="Ver lixeira"
+               >
+                 <History className="h-5 w-5" />
+               </button>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Aprovado banner */}
-      {isAprovado && (
-        <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400 flex items-center gap-2">
-          <CheckCircle2 className="h-4 w-4" />
-          Diário aprovado — edição bloqueada.
-          {painel.diario.pdf_path && (
-            <Button size="sm" variant="ghost" className="ml-auto gap-2 text-emerald-400 hover:text-emerald-300" onClick={() => void handleDownloadSavedPdf()}>
-              <Download className="h-4 w-4" />Baixar PDF salvo
-            </Button>
-          )}
-        </div>
-      )}
+      {/* Summary Row */}
+      <SummaryGrid painel={painel} />
 
-      {/* Modo edição ativo — banner */}
-      {editMode && (
-        <div className="rounded-lg border border-primary/30 bg-primary/8 px-4 py-3 text-sm text-primary flex items-center gap-2">
-          <Pencil className="h-4 w-4 shrink-0" />
-          Modo edição ativo — adicione, edite ou remova registros. Clique nos campos para editar inline.
-        </div>
-      )}
+      {/* Messages / Banner */}
+      <div className="space-y-3">
+        {isAprovado && (
+          <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400 flex items-center gap-3 backdrop-blur-sm">
+            <CheckCircle2 className="h-5 w-5 shrink-0" />
+            <div className="flex-1">
+              <span className="font-bold">Relatório Oficial Gerado.</span> Edição bloqueada para conformidade.
+            </div>
+            {painel.diario.pdf_path && (
+              <Button size="sm" variant="ghost" className="gap-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10" onClick={() => void handleDownloadSavedPdf()}>
+                <Download className="h-4 w-4" />Baixar PDF original
+              </Button>
+            )}
+          </div>
+        )}
 
-      {isDeleted && (
-        <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300 flex items-center gap-2">
-          <Trash2 className="h-4 w-4 shrink-0" />
-          Diário ocultado para níveis 2 e 3. Ele segue disponível apenas para auditoria do admin até ser restaurado.
-        </div>
-      )}
+        {isDeleted && (
+          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300 flex items-center gap-3">
+            <Trash2 className="h-5 w-5 shrink-0" />
+            <div className="flex-1">Diário movido para lixeira interna. Visível apenas por administradores.</div>
+            <Button size="sm" variant="outline" className="border-red-500/50 text-red-400 hover:bg-red-500/20" onClick={() => void handleRestoreCurrentDiario()}>Restaurar</Button>
+          </div>
+        )}
 
-      {/* Alertas */}
-      {alertasAtivos.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-sm font-semibold flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-400" />
-            Alertas ({alertasAtivos.length})
-          </h2>
-          {alertasAtivos.map((alerta) => (
-            <AlertCard key={alerta.id} alerta={alerta}
-              onResolve={() => void runMutationWithToast(() => resolverAlerta.mutateAsync(alerta.id), "Alerta resolvido")} />
-          ))}
-        </div>
-      )}
+        {alertasAtivos.length > 0 && (
+          <div className="space-y-2">
+            {alertasAtivos.map((alerta) => (
+              <AlertCard key={alerta.id} alerta={alerta}
+                onResolve={() => void runMutationWithToast(() => resolverAlerta.mutateAsync(alerta.id), "Alerta resolvido")} />
+            ))}
+          </div>
+        )}
+      </div>
 
       {isAdmin && showTrash && (
-        <SectionCard title="Lixeira do Admin" icon={<Trash2 className="h-4 w-4 text-red-400" />} count={lixeira.data?.length}>
+        <SectionCard title="Lixeira Administrativa" icon={<Trash2 className="h-4 w-4 text-red-400" />} count={lixeira.data?.length}>
           {lixeira.isLoading ? (
             <div className="h-24 rounded-lg bg-muted animate-pulse" />
           ) : !lixeira.data?.length ? (
-            <p className="text-sm text-muted-foreground">Nenhum diário ocultado nesta obra.</p>
+            <p className="text-sm text-muted-foreground text-center py-6">Nenhum diário removido recentemente.</p>
           ) : (
             <div className="space-y-3">
-              <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 md:grid-cols-[minmax(0,1fr)_170px_170px]">
+               <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 md:grid-cols-[minmax(0,1fr)_170px_170px]">
                 <label className="space-y-1 text-sm">
-                  <span className="font-medium">Obra</span>
-                  <select className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={trashObraId ?? ""} onChange={(e) => setTrashObraId(e.target.value ? Number(e.target.value) : null)}>
+                  <span className="font-medium">Filtrar Obra</span>
+                   <select className={`${inputCls} w-full`} value={trashObraId ?? ""} onChange={(e) => setTrashObraId(e.target.value ? Number(e.target.value) : null)}>
                     {obras?.map((obra) => (
                       <option key={obra.id} value={obra.id}>{obra.nome}</option>
                     ))}
                   </select>
                 </label>
-                <label className="space-y-1 text-sm">
+                 <label className="space-y-1 text-sm">
                   <span className="font-medium">Início</span>
-                  <input className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" type="date" value={trashStart} onChange={(e) => setTrashStart(e.target.value)} />
+                  <input className={inputCls} type="date" value={trashStart} onChange={(e) => setTrashStart(e.target.value)} />
                 </label>
                 <label className="space-y-1 text-sm">
                   <span className="font-medium">Fim</span>
-                  <input className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" type="date" value={trashEnd} onChange={(e) => setTrashEnd(e.target.value)} />
+                  <input className={inputCls} type="date" value={trashEnd} onChange={(e) => setTrashEnd(e.target.value)} />
                 </label>
               </div>
               {lixeira.data.map((item) => (
-                <div key={item.id} className="flex items-start justify-between gap-3 rounded-lg border px-4 py-3">
+                <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border px-4 py-3 bg-card/40">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium">
-                      {new Date(`${item.data}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                    <p className="text-sm font-bold">
+                       {format(parseISO(item.data), "dd 'de' MMMM", { locale: ptBR })}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {item.motivo_exclusao || "Sem motivo informado"}
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-1 italic">
+                      "{item.motivo_exclusao || "Sem observação"}"
                     </p>
-                    {item.deletado_em && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        ocultado em {new Date(item.deletado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
-                      </p>
-                    )}
                   </div>
                   <div className="flex shrink-0 gap-2">
-                    <Button size="sm" variant="outline" onClick={() => navigate({ to: "/obras/$obraId/diario/$data", params: { obraId, data: item.data } })}>
-                      Abrir
+                    <Button size="sm" variant="secondary" onClick={() => navigate({ to: "/obras/$obraId/diario/$data", params: { obraId, data: item.data } })}>
+                      Ver
                     </Button>
                     <Button size="sm" onClick={() => void handleRestoreFromTrash(item)}>
                       Restaurar
@@ -1027,77 +1120,109 @@ export default function DiarioPage() {
         </SectionCard>
       )}
 
-      {/* Content grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SectionCard title="Efetivo" icon={<Users className="h-4 w-4 text-blue-400" />} count={painel.total_efetivo.geral}>
-          <EfetivoTable
-            items={painel.efetivo} canEdit={canEdit} onUpdate={updateEfetivo}
-            editMode={editMode} obraId={obraIdNum} data={data}
-            onDelete={(id) => void runMutationWithToast(() => deleteEfetivo.mutateAsync(id), "Removido")}
-            onAdd={(b) => addEfetivo.mutateAsync(b as Parameters<typeof addEfetivo.mutateAsync>[0])}
-          />
-        </SectionCard>
+      {/* Main Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Coluna Central - Detalhes (2/3 da tela) */}
+        <div className="lg:col-span-2 space-y-6">
+          <SectionCard title="Efetivo Diário" icon={<Users className="h-4 w-4 text-sky-400" />} count={painel.total_efetivo.geral}>
+            <EfetivoTable
+              items={painel.efetivo} canEdit={canEdit} onUpdate={updateEfetivo}
+              editMode={editMode} obraId={obraIdNum} data={data}
+              onDelete={(id) => void runMutationWithToast(() => deleteEfetivo.mutateAsync(id), "Removido")}
+              onAdd={(b) => addEfetivo.mutateAsync(b as Parameters<typeof addEfetivo.mutateAsync>[0])}
+            />
+          </SectionCard>
 
-        <SectionCard title="Atividades" icon={<Activity className="h-4 w-4 text-purple-400" />}
-          count={painel.atividades.iniciadas.length + painel.atividades.em_andamento.length + painel.atividades.concluidas.length}>
-          <AtividadesBlock
-            atividades={painel.atividades} canEdit={canEdit} onUpdate={updateAtividade}
-            editMode={editMode} obraId={obraIdNum} data={data}
-            onDelete={(id) => void runMutationWithToast(() => deleteAtividade.mutateAsync(id), "Removido")}
-            onAdd={(b) => addAtividade.mutateAsync(b as Parameters<typeof addAtividade.mutateAsync>[0])}
-          />
-        </SectionCard>
+          <SectionCard title="Atividades" icon={<Activity className="h-4 w-4 text-purple-400" />}
+            count={painel.atividades.iniciadas.length + painel.atividades.em_andamento.length + painel.atividades.concluidas.length}>
+            <AtividadesBlock
+              atividades={painel.atividades} canEdit={canEdit} onUpdate={updateAtividade}
+              editMode={editMode} obraId={obraIdNum} data={data}
+              onDelete={(id) => void runMutationWithToast(() => deleteAtividade.mutateAsync(id), "Removido")}
+              onAdd={(b) => addAtividade.mutateAsync(b as Parameters<typeof addAtividade.mutateAsync>[0])}
+            />
+          </SectionCard>
 
-        <SectionCard title="Clima" icon={<Cloud className="h-4 w-4 text-sky-400" />} count={painel.clima.length}>
-          <ClimaBlock items={painel.clima} />
-        </SectionCard>
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+             <SectionCard title="Clima" icon={<Cloud className="h-4 w-4 text-sky-400" />} count={painel.clima.length}>
+               <ClimaBlock items={painel.clima} />
+             </SectionCard>
+             <SectionCard title="Materiais" icon={<Package className="h-4 w-4 text-amber-400" />} count={painel.materiais.length}>
+               <MateriaisTable
+                 items={painel.materiais} canEdit={canEdit} onUpdate={updateMaterial}
+                 editMode={editMode} obraId={obraIdNum} data={data}
+                 onDelete={(id) => void runMutationWithToast(() => deleteMaterial.mutateAsync(id), "Removido")}
+                 onAdd={(b) => addMaterial.mutateAsync(b as Parameters<typeof addMaterial.mutateAsync>[0])}
+               />
+             </SectionCard>
+           </div>
 
-        <SectionCard title="Materiais" icon={<Package className="h-4 w-4 text-amber-400" />} count={painel.materiais.length}>
-          <MateriaisTable
-            items={painel.materiais} canEdit={canEdit} onUpdate={updateMaterial}
-            editMode={editMode} obraId={obraIdNum} data={data}
-            onDelete={(id) => void runMutationWithToast(() => deleteMaterial.mutateAsync(id), "Removido")}
-            onAdd={(b) => addMaterial.mutateAsync(b as Parameters<typeof addMaterial.mutateAsync>[0])}
-          />
-        </SectionCard>
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+             <SectionCard title="Equipamentos" icon={<Wrench className="h-4 w-4 text-gray-400" />} count={painel.equipamentos.length}>
+               <EquipamentosBlock items={painel.equipamentos} />
+             </SectionCard>
+             <SectionCard title="Anotações" icon={<FileText className="h-4 w-4 text-emerald-400" />} count={painel.anotacoes.length}>
+               <AnotacoesBlock
+                 items={painel.anotacoes} canEdit={canEdit} onUpdate={updateAnotacao}
+                 editMode={editMode} obraId={obraIdNum} data={data}
+                 onDelete={(id) => void runMutationWithToast(() => deleteAnotacao.mutateAsync(id), "Removido")}
+                 onAdd={(b) => addAnotacao.mutateAsync(b as Parameters<typeof addAnotacao.mutateAsync>[0])}
+               />
+             </SectionCard>
+           </div>
 
-        <SectionCard title="Equipamentos" icon={<Wrench className="h-4 w-4 text-gray-400" />} count={painel.equipamentos.length}>
-          <EquipamentosBlock items={painel.equipamentos} />
-        </SectionCard>
+          <SectionCard title="Registro Fotográfico" icon={<Camera className="h-4 w-4 text-pink-400" />} count={painel.fotos.length}>
+            <FotosBlock items={painel.fotos} />
+          </SectionCard>
+        </div>
 
-        <SectionCard title="Anotações" icon={<FileText className="h-4 w-4 text-emerald-400" />} count={painel.anotacoes.length}>
-          <AnotacoesBlock
-            items={painel.anotacoes} canEdit={canEdit} onUpdate={updateAnotacao}
-            editMode={editMode} obraId={obraIdNum} data={data}
-            onDelete={(id) => void runMutationWithToast(() => deleteAnotacao.mutateAsync(id), "Removido")}
-            onAdd={(b) => addAnotacao.mutateAsync(b as Parameters<typeof addAnotacao.mutateAsync>[0])}
-          />
-        </SectionCard>
+        {/* Coluna Direita - Timeline & Auditoria (1/3 da tela) */}
+        <div className="space-y-6">
+          <div className="rounded-3xl border bg-card/60 overflow-hidden shadow-sm backdrop-blur flex flex-col h-full sticky top-6 max-h-[calc(100vh-120px)]">
+            <div className="flex bg-muted/30 p-1 border-b">
+              <button
+                onClick={() => setRightPanel("timeline")}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold uppercase tracking-wider rounded-2xl transition-all ${rightPanel === "timeline" ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:bg-card/40"}`}
+              >
+                <Clock className="h-3.5 w-3.5" />
+                Timeline
+              </button>
+              <button
+                onClick={() => setRightPanel("audit")}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold uppercase tracking-wider rounded-2xl transition-all ${rightPanel === "audit" ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:bg-card/40"}`}
+              >
+                <History className="h-3.5 w-3.5" />
+                Auditoria
+              </button>
+            </div>
 
-        <SectionCard title="Fotos" icon={<Camera className="h-4 w-4 text-pink-400" />} count={painel.fotos.length}>
-          <FotosBlock items={painel.fotos} />
-        </SectionCard>
-      </div>
+             <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+               {rightPanel === "timeline" ? (
+                 <TimelineBlock items={painel.timeline} />
+               ) : (
+                  <div className="space-y-3">
+                    {auditoria.isLoading ? (
+                      <div className="h-24 bg-muted animate-pulse rounded-xl" />
+                    ) : !auditoria.data?.length ? (
+                      <div className="text-center py-20 opacity-30">
+                        <History className="h-8 w-8 mx-auto mb-2" />
+                        <p className="text-xs">Sem log de alterações.</p>
+                      </div>
+                    ) : (
+                      auditoria.data.map((log) => <AuditRow key={log.id} log={log} />)
+                    )}
+                  </div>
+               )}
+             </div>
 
-      {/* Audit trail */}
-      <div className="border-t pt-4">
-        <Button variant="ghost" size="sm" className="gap-2" onClick={() => setShowAudit(!showAudit)}>
-          <History className="h-4 w-4" />
-          Histórico de Alterações
-        </Button>
-        {showAudit && (
-          <div className="mt-3">
-            {auditoria.isLoading ? (
-              <div className="h-20 bg-muted animate-pulse rounded" />
-            ) : !auditoria.data?.length ? (
-              <p className="text-sm text-muted-foreground py-2">Nenhuma alteração registrada.</p>
-            ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {auditoria.data.map((log) => <AuditRow key={log.id} log={log} />)}
-              </div>
-            )}
+             <div className="p-4 border-t bg-muted/10">
+               <div className="flex items-center justify-between text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
+                 <span>{rightPanel === "timeline" ? "Live Feed" : "Histórico Full"}</span>
+                 <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+               </div>
+             </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

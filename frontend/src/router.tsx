@@ -14,6 +14,7 @@ import ObrasPage from "@/pages/obras";
 import DiarioPage from "@/pages/diario";
 import DashboardPage from "@/pages/dashboard";
 import UsuariosPage from "@/pages/usuarios";
+import CalendarioPage from "@/pages/calendario";
 
 // Root route — renders either login or layout
 const rootRoute = createRootRoute({
@@ -83,6 +84,13 @@ const diarioRoute = createRoute({
   component: DiarioPage,
 });
 
+// Calendario
+const calendarioRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/obras/$obraId/historico",
+  component: CalendarioPage,
+});
+
 // Dashboard
 const dashboardRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
@@ -110,7 +118,7 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   inviteAcceptRoute,
   presentationRoute,
-  authLayoutRoute.addChildren([indexRoute, obrasRoute, diarioRoute, dashboardRoute, usuariosRoute, docsRoute, ajudaRoute]),
+  authLayoutRoute.addChildren([indexRoute, obrasRoute, diarioRoute, dashboardRoute, usuariosRoute, calendarioRoute, docsRoute, ajudaRoute]),
 ]);
 
 export const router = createRouter({ routeTree });

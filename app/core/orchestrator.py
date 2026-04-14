@@ -145,23 +145,65 @@ class Orchestrator:
         if not texto:
             return self._resposta(msg, "🤔 Não entendi. Mande texto ou áudio sobre o que aconteceu na obra.")
 
-        # 4. Classificar intenção
+        # 4. Obter contexto da obra (atividades em andamento) para ajudar a IA
+        atividades_ativas = self.db.query(Atividade).filter(
+            Atividade.obra_id == obra_id,
+            Atividade.status.in_([AtividadeStatus.INICIADA, AtividadeStatus.EM_ANDAMENTO])
+        ).all()
+        contexto_obra = [
+            {"id": a.id, "descricao": a.descricao, "local": a.local, "etapa": a.etapa}
+            for a in atividades_ativas
+        ]
+
+        # 5. Classificar intenções (suporta múltiplas intenções em uma única mensagem)
         try:
-            intent = await classify_intent(texto, cast(Optional[int], obra_id))
+            intent_result = await classify_intent(texto, cast(Optional[int], obra_id), context=contexto_obra)
         except Exception as e:
             return self._resposta(msg, f"❌ Erro ao processar: {str(e)}")
 
-        # usuário já validado, obra_id não é None aqui — cast para int para o typechecker
+        intents = intent_result.get("intents", [])
+        if not intents:
+            # Fallback para candidatos de palavras-chave
+            candidates = intent_result.get("candidates")
+            if candidates:
+                opcoes = self._opcoes_por_intents(candidates)
+                state = self.state_service.set_state(
+                    channel=msg.canal.value,
+                    identifier=msg.telefone,
+                    state_type=self.STATE_KIND_INTENT,
+                    payload={"text_original": texto, "choices": opcoes},
+                    text_original=texto,
+                    source_message_id=msg.message_id,
+                )
+                return self._resposta(msg, "📋 O que você quer registrar?", botoes=self._botoes_estado(state.state_token, opcoes))
+            return self._resposta(msg, "🤔 Não consegui identificar o que registrar. Pode detalhar melhor?")
+
+        # 5. Processar lista de intenções
+        respostas = []
         obra_id_val = cast(int, usuario.obra_id)
-        return await self._processar_intent_resultado(
-            msg=msg,
-            usuario_nome=cast(str, usuario.nome),
-            obra_id=obra_id_val,
-            texto_original=texto,
-            intent_result=intent,
-            prompt_confianca_baixa=True,
-            pode_confirmar=True,
-        )
+        
+        for item in intents:
+            # Processa cada item individualmente
+            resp_item = await self._processar_item_intent(
+                msg=msg,
+                usuario_nome=cast(str, usuario.nome),
+                obra_id=obra_id_val,
+                texto_original=texto,
+                intent_item=item,
+                pode_confirmar=(len(intents) == 1), # Confirmação só para mensagens simples
+            )
+            
+            # Se o processamento de um item gerou um pedido de interação (OutgoingMessage com botões/estado)
+            # retornamos imediatamente para resolver a pendência.
+            if isinstance(resp_item, OutgoingMessage):
+                if resp_item.botoes:
+                    return resp_item
+                respostas.append(resp_item.texto)
+            else:
+                respostas.append(str(resp_item))
+
+        # 6. Responder com o resumo de tudo que foi processado
+        return self._resposta(msg, "\n".join(respostas))
 
     async def _registrar(self, intent: str, data: dict, obra_id: int,
                          registrado_por: str, texto_original: str,
@@ -580,61 +622,49 @@ class Orchestrator:
             partes.append(f"🔓 {result['dependentes_liberadas']} atividade(s) dependente(s) liberada(s)")
         return "\n".join(partes)
 
-    async def _processar_intent_resultado(
+    async def _processar_item_intent(
         self,
         msg: IncomingMessage,
         usuario_nome: str,
         obra_id: int,
         texto_original: str,
-        intent_result: dict,
+        intent_item: dict,
         *,
-        prompt_confianca_baixa: bool = True,
         pode_confirmar: bool = True,
-    ) -> OutgoingMessage:
-        intent_type = intent_result.get("intent", "desconhecido")
-        data = intent_result.get("data", {}) or {}
-        confidence = float(intent_result.get("confidence") or 0)
+    ) -> str | OutgoingMessage:
+        """Processa um único item de intenção vindo da lista."""
+        intent_type = intent_item.get("intent", "desconhecido")
+        data = intent_item.get("data", {}) or {}
+        confidence = float(intent_item.get("confidence") or 0)
 
-        if prompt_confianca_baixa and confidence < self.INTENT_CONFIDENCE_THRESHOLD:
-            candidates = intent_result.get("candidates") or self.DEFAULT_INTENT_CHOICES
+        # 1. Confiança baixa ou Necessidade de escolha de Intent
+        if pode_confirmar and confidence < self.INTENT_CONFIDENCE_THRESHOLD:
+            candidates = intent_item.get("candidates") or self.DEFAULT_INTENT_CHOICES
             opcoes = self._opcoes_por_intents(candidates)
             state = self.state_service.set_state(
                 channel=msg.canal.value,
                 identifier=msg.telefone,
                 state_type=self.STATE_KIND_INTENT,
-                payload={
-                    "text_original": texto_original,
-                    "choices": opcoes,
-                },
+                payload={"text_original": texto_original, "choices": opcoes},
                 text_original=texto_original,
                 source_message_id=msg.message_id,
             )
-            return self._resposta(
-                msg,
-                "📋 O que você quer registrar?",
-                botoes=self._botoes_estado(state.state_token, opcoes),
-            )
+            return self._resposta(msg, f"❓ Não tenho certeza sobre '{intent_type}'. O que você quis registrar?", botoes=self._botoes_estado(state.state_token, opcoes))
 
-        if pode_confirmar and intent_result.get("requires_confirmation"):
-            confirm = intent_result.get("confirmation_message", "Confirma o registro?")
+        # 2. Requer confirmação explícita (se o modelo pediu)
+        if pode_confirmar and intent_item.get("requires_confirmation"):
+            confirm = intent_item.get("confirmation_message", "Confirma o registro?")
             state = self.state_service.set_state(
                 channel=msg.canal.value,
                 identifier=msg.telefone,
                 state_type=self.STATE_KIND_CONFIRMATION,
-                payload={
-                    "text_original": texto_original,
-                    "intent_result": intent_result,
-                    "choices": self._opcoes_confirmacao(),
-                },
+                payload={"text_original": texto_original, "intent_result": {"intents": [intent_item]}, "choices": self._opcoes_confirmacao()},
                 text_original=texto_original,
                 source_message_id=msg.message_id,
             )
-            return self._resposta(
-                msg,
-                f"❓ {confirm}",
-                botoes=self._botoes_estado(state.state_token, self._opcoes_confirmacao()),
-            )
+            return self._resposta(msg, f"❓ {confirm}", botoes=self._botoes_estado(state.state_token, self._opcoes_confirmacao()))
 
+        # 3. Roteamento Especial: Conclusão Semântica
         if intent_type == "conclusao":
             return await self._resolver_conclusao_semantica(
                 msg=msg,
@@ -644,6 +674,7 @@ class Orchestrator:
                 data=data,
             )
 
+        # 4. Registro padrão
         try:
             resposta = await self._registrar(
                 intent_type,
@@ -653,10 +684,9 @@ class Orchestrator:
                 texto_original,
                 msg.foto_path,
             )
+            return resposta
         except Exception as exc:
-            return self._resposta(msg, f"❌ Erro ao registrar: {str(exc)}")
-
-        return self._resposta(msg, resposta)
+            return f"❌ Erro em {intent_type}: {str(exc)}"
 
     async def _resolver_estado_pendente(
         self,

@@ -97,6 +97,16 @@ def dashboard_kpis(obra_id: int,
         Efetivo.data <= data_fim,
     ).group_by(Efetivo.data).order_by(Efetivo.data).all()
 
+    # Tendências: atividades concluídas por dia
+    atividades_diario = db.query(
+        Atividade.data_fim_real.label("data"), func.count(Atividade.id).label("total")
+    ).filter(
+        Atividade.obra_id == obra_id,
+        Atividade.data_fim_real >= data_inicio,
+        Atividade.data_fim_real <= data_fim,
+        Atividade.status == AtividadeStatus.CONCLUIDA,
+    ).group_by(Atividade.data_fim_real).order_by(Atividade.data_fim_real).all()
+
     return {
         "obra": {"id": obra.id, "nome": obra.nome},
         "periodo": {"inicio": str(data_inicio), "fim": str(data_fim), "dias": dias_periodo},
@@ -110,6 +120,7 @@ def dashboard_kpis(obra_id: int,
         },
         "tendencias": {
             "efetivo_diario": [{"data": str(d.data), "total": d.total} for d in efetivo_diario],
+            "atividades_diario": [{"data": str(d.data), "total": d.total} for d in atividades_diario],
         },
     }
 

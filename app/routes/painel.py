@@ -159,6 +159,29 @@ def painel_diario(obra_id: int, data_ref: date, db: Session = Depends(get_db),
             "dados_contexto": al.dados_contexto,
         }
 
+    # Timeline: Agregação de todos os eventos do dia por horário
+    events = []
+
+    for a in iniciadas:
+        events.append({"ts": a.created_at, "type": "atividade", "label": "Início de Atividade", "desc": a.descricao, "author": a.registrado_por, "id": a.id})
+    for a in concluidas:
+        events.append({"ts": a.updated_at, "type": "conclusão", "label": "Atividade Concluída", "desc": a.descricao, "author": a.registrado_por, "id": a.id})
+    for e in efetivo:
+        events.append({"ts": e.created_at, "type": "efetivo", "label": f"Efetivo: {e.funcao}", "desc": f"{e.quantidade} pessoas da empresa {e.empresa or 'principal'}", "author": e.registrado_por, "id": e.id})
+    for m in materiais:
+        events.append({"ts": m.created_at, "type": "material", "label": f"Material: {m.tipo.capitalize()}", "desc": f"{m.quantidade or ''} {m.unidade or ''} de {m.material}", "author": m.registrado_por, "id": m.id})
+    for eq in equipamentos:
+        events.append({"ts": eq.created_at, "type": "equipamento", "label": f"Equipamento: {eq.tipo.capitalize()}", "desc": f"{eq.quantidade}x {eq.equipamento}", "author": eq.registrado_por, "id": eq.id})
+    for an in anotacoes:
+        events.append({"ts": an.created_at, "type": "anotação", "label": f"Anotação: {an.tipo.capitalize()}", "desc": an.descricao, "author": an.registrado_por, "id": an.id, "prioridade": an.prioridade})
+    for f in fotos:
+        events.append({"ts": f.created_at, "type": "foto", "label": "Nova Foto", "desc": f.descricao or "Sem descrição", "author": f.registrado_por, "id": f.id, "file": f.arquivo})
+    for cl in climas:
+        events.append({"ts": cl.created_at, "type": "clima", "label": f"Clima: {cl.periodo.capitalize()}", "desc": f"{cl.condicao} | {cl.temperatura or '--'}°C", "author": "Sistema", "id": cl.id})
+
+    # Ordenar por data (mais antigo primeiro para o fluxo do dia)
+    events.sort(key=lambda x: x["ts"] if x["ts"] else data_ref)
+
     return {
         "obra": {
             "id": obra.id, "nome": obra.nome, "endereco": obra.endereco,
@@ -203,4 +226,40 @@ def painel_diario(obra_id: int, data_ref: date, db: Session = Depends(get_db),
             "is_override": expediente is not None,
         },
         "alertas": [_serialize_alerta(al) for al in alertas],
+        "timeline": [
+            {
+                "id": ev["id"],
+                "ts": str(ev["ts"]) if ev["ts"] else None,
+                "type": ev["type"],
+                "label": ev["label"],
+                "desc": ev["desc"],
+                "author": ev["author"],
+                "file": ev.get("file"),
+                "prioridade": ev.get("prioridade"),
+            } for ev in events
+        ]
     }
+@router.get("/calendario/{obra_id}")
+def painel_calendario(
+    obra_id: int,
+    inicio: date,
+    fim: date,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    """Retorna os status dos diários em um intervalo para renderização de calendário."""
+    ensure_obra_access(current_user, obra_id, required_level=3)
+    diarios = db.query(DiarioDia).filter(
+        DiarioDia.obra_id == obra_id,
+        DiarioDia.data >= inicio,
+        DiarioDia.data <= fim
+    ).all()
+    
+    return [
+        {
+            "data": d.data,
+            "status": d.status,
+            "deletado": bool(d.deletado_em)
+        }
+        for d in diarios
+    ]
