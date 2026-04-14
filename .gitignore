@@ -1,3 +1,7 @@
+# Arquivos temporários
+curl
+/tmp/
+
 # Ambiente e segredos
 .env
 *.env
@@ -66,6 +70,8 @@ media/
 *.oga
 docs/ideias.md
 docs/assets/
+repomix-output.md
+repomix-output.xml
 
 # PDFs gerados
 output/
@@ -95,3 +101,5 @@ frontend/dist/
 # Static (built frontend copied for serving)
 static/
 docker-compose.yml
+qrcode-bot-daniel.png
+docker-compose.evolution.yml

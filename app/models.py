@@ -57,6 +57,13 @@ class TipoEfetivo(str, enum.Enum):
     EMPREITEIRO = "empreiteiro"  # empresa terceirizada
 
 
+class TipoVinculo(str, enum.Enum):
+    CLT = "clt"
+    TERCEIRIZADO = "terceirizado"
+    TEMPORARIO = "temporario"
+    AUTONOMO = "autonomo"
+
+
 class DiarioStatus(str, enum.Enum):
     RASCUNHO = "rascunho"
     EM_REVISAO = "em_revisao"
@@ -83,6 +90,7 @@ class Empresa(Base):
     created_at = Column(DateTime, default=utc_now)
 
     obras = relationship("Obra", back_populates="empresa")
+    funcoes = relationship("Funcao", back_populates="empresa")
 
 
 # === Obra ===
@@ -274,15 +282,72 @@ class Expediente(Base):
     )
 
 
+# === Função ===
+# Catálogo normalizado de funções (pedreiro, servente, carpinteiro…).
+# Evita divergência de nomes nos lançamentos de efetivo.
+class Funcao(Base):
+    __tablename__ = "funcoes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String(100), nullable=False)
+    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=True)
+    ativa = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    empresa = relationship("Empresa")
+    colaboradores = relationship("Colaborador", back_populates="funcao_ref")
+
+    __table_args__ = (
+        UniqueConstraint("nome", "empresa_id", name="uq_funcao_empresa"),
+    )
+
+
+# === Colaborador ===
+# Cadastro individual de mão de obra. Isolado no MVP — preenchimento via
+# IA/QR-code/Telegram será adicionado depois. FKs nullable para não bloquear
+# o lançamento por grupo que o MVP usa.
+class Colaborador(Base):
+    __tablename__ = "colaboradores"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String(255), nullable=False)
+    apelido = Column(String(100), nullable=True)
+
+    funcao_id = Column(Integer, ForeignKey("funcoes.id"), nullable=True)
+    obra_id = Column(Integer, ForeignKey("obras.id"), nullable=True)
+    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=True)
+
+    tipo_vinculo = Column(
+        SAEnum(TipoVinculo, values_callable=lambda x: [e.value for e in x]),
+        nullable=True
+    )
+
+    ativo = Column(Boolean, default=True)
+    observacoes = Column(Text, nullable=True)       # notas internas, sem registro no diário
+    qrcode_hash = Column(String(64), nullable=True)  # futuro: leitura de QR-code
+
+    # Rateio entre obras — nullable, pós-MVP
+    rateio_obra_ids = Column(JSON, nullable=True)    # ex: [{"obra_id": 2, "pct": 50}, ...]
+
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    funcao_ref = relationship("Funcao", back_populates="colaboradores")
+    obra = relationship("Obra")
+    empresa = relationship("Empresa")
+
+
 # === Efetivo ===
-# Dividido em dois grupos:
-#   proprio     → cargos padronizados da empresa, basta informar funcao + quantidade
-#   empreiteiro → empresa terceirizada + total de funcionários
+# Lançamento diário de mão de obra por grupo (quantidade × função).
+# Dividido em dois tipos:
+#   proprio     → subtotais por função
+#   empreiteiro → subtotais por empresa terceirizada
 #
 # No RDO:
-#   Total empresa   = sum(proprio)
+#   Total empresa      = sum(proprio)
 #   Total empreiteiras = sum(empreiteiro, group_by empresa)
-#   Total geral     = total empresa + total empreiteiras  ← efetivo oficial
+#   Total geral        = total empresa + total empreiteiras
 class Efetivo(Base):
     __tablename__ = "efetivo"
 
@@ -296,18 +361,29 @@ class Efetivo(Base):
         default=TipoEfetivo.PROPRIO
     )
 
-    # Próprio: funcao obrigatória (pedreiro, servente, etc.)
-    # Empreiteiro: funcao pode ser omitida (só conta o total por empresa)
+    # --- função ---
+    # funcao (string) mantida para compatibilidade com dados existentes
+    # funcao_id (FK) é a referência normalizada — transição gradual
     funcao = Column(String(100))
+    funcao_id = Column(Integer, ForeignKey("funcoes.id"), nullable=True)
+
     quantidade = Column(Integer, nullable=False)
     empresa = Column(String(255))  # null = própria empresa
 
+    # Colaborador individual — nullable, pós-MVP (lançamento por indivíduo)
+    colaborador_id = Column(Integer, ForeignKey("colaboradores.id"), nullable=True)
+
+    # Observação pública (vai pro RDO) vs interna (apenas gestão)
     observacoes = Column(Text)
+    observacao_interna = Column(Text, nullable=True)  # ex: "fiscal viu problema na armação"
+
     registrado_por = Column(String(255))
     texto_original = Column(Text)
     created_at = Column(DateTime, default=utc_now)
 
     obra = relationship("Obra", back_populates="efetivo")
+    funcao_ref = relationship("Funcao")
+    colaborador = relationship("Colaborador")
 
 
 # === Anotação ===
@@ -572,3 +648,33 @@ class ConviteAcesso(Base):
     obra = relationship("Obra")
     criado_por = relationship("Usuario", foreign_keys=[criado_por_id])
     usado_por = relationship("Usuario", foreign_keys=[usado_por_id])
+
+
+# === WhatsApp Instância ===
+class WhatsAppInstancia(Base):
+    """Cada usuário possui no máximo uma instância no Evolution API.
+    O nome da instância é o número de telefone normalizado (apenas dígitos).
+    O escopo das mensagens recebidas se limita às obras associadas a esse usuário.
+    """
+    __tablename__ = "whatsapp_instancias"
+
+    id = Column(Integer, primary_key=True, index=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), unique=True, nullable=False)
+
+    # Nome da instância no Evolution API (= telefone normalizado, ex: "5511999998888")
+    nome_instancia = Column(String(50), unique=True, nullable=False)
+
+    # Número de telefone do bot/número cadastrado para esta instância
+    numero_bot = Column(String(20), nullable=True)  # preenchido após conexão
+
+    # Status: pending | connecting | open | close
+    status = Column(String(20), default="pending", nullable=False)
+
+    # Webhook configurado nesta instância no Evolution
+    webhook_configurado = Column(Boolean, default=False)
+
+    # Data de criação e última atualização de status
+    criado_em = Column(DateTime, default=utc_now)
+    atualizado_em = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    usuario = relationship("Usuario", backref="whatsapp_instancia")

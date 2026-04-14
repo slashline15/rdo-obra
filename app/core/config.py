@@ -31,7 +31,10 @@ class Settings(BaseSettings):
     # WhatsApp (Evolution API)
     evolution_api_url: Optional[str] = None
     evolution_api_key: Optional[str] = None
-    evolution_instance: Optional[str] = None
+    evolution_instance: Optional[str] = None  # legado; multi-instância usa WhatsAppInstancia
+
+    # URL pública do backend — usada para registrar webhooks nas instâncias
+    public_url: str = "https://rdo.engdaniel.org"
 
     # Storage
     upload_dir: str = "./uploads"

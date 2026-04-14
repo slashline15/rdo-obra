@@ -82,12 +82,28 @@ class Orchestrator:
         self.state_service = ConversationStateService(db)
         self.semantic_search = ActivitySemanticSearch(db)
 
+    @staticmethod
+    def _variantes_telefone_br(telefone: str) -> list[str]:
+        """Gera variantes de número brasileiro (com/sem nono dígito)."""
+        variantes = [telefone]
+        if not telefone.startswith("55") or len(telefone) not in (12, 13):
+            return variantes
+        ddd = telefone[2:4]
+        if len(telefone) == 12:
+            # sem nono dígito → adicionar
+            variantes.append(f"55{ddd}9{telefone[4:]}")
+        elif len(telefone) == 13 and telefone[4] == "9":
+            # com nono dígito → remover
+            variantes.append(f"55{ddd}{telefone[5:]}")
+        return variantes
+
     async def processar(self, msg: IncomingMessage) -> OutgoingMessage:
         """Ponto de entrada único para todas as mensagens."""
 
-        # 1. Identificar usuário
+        # 1. Identificar usuário (com normalização de nono dígito BR)
+        variantes = self._variantes_telefone_br(msg.telefone)
         usuario = self.db.query(Usuario).filter(
-            Usuario.telefone == msg.telefone
+            Usuario.telefone.in_(variantes)
         ).first()
 
         if not usuario:

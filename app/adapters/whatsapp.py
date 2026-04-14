@@ -1,19 +1,23 @@
 """
 Adapter WhatsApp — via Evolution API (self-hosted, sem API oficial).
 """
+import logging
 import os
 import httpx
 from app.adapters.base import BaseAdapter
+
+logger = logging.getLogger(__name__)
 from app.core.types import IncomingMessage, OutgoingMessage, Canal, TipoMensagem
 from app.core.config import settings
 
 
 class WhatsAppAdapter(BaseAdapter):
 
-    def __init__(self):
+    def __init__(self, instance_override: str | None = None):
         self.api_url = settings.evolution_api_url
         self.api_key = settings.evolution_api_key
-        self.instance = settings.evolution_instance
+        # instance_override permite especificar qual instância usar no momento da chamada
+        self.instance = instance_override or settings.evolution_instance
 
     @property
     def headers(self):
@@ -81,20 +85,25 @@ class WhatsAppAdapter(BaseAdapter):
 
         if "audioMessage" in message:
             tipo = TipoMensagem.AUDIO
-            media_url = message.get("audioMessage", {}).get("url")
-            if media_url:
-                audio_path = await self._download_url(
-                    media_url, f"./uploads/audio/{key.get('id', 'audio')}.ogg"
-                )
+            msg_id = key.get("id", "audio")
+            save_path = f"./uploads/audio/{msg_id}.ogg"
+            audio_path = await self.download_media(msg_id, save_path)
+            if not audio_path:
+                # Fallback: tentar URL direta (pode ser não-criptografada)
+                media_url = message.get("audioMessage", {}).get("url")
+                if media_url:
+                    audio_path = await self._download_url(media_url, save_path)
 
         elif "imageMessage" in message:
             tipo = TipoMensagem.FOTO
             legenda = message.get("imageMessage", {}).get("caption")
-            media_url = message.get("imageMessage", {}).get("url")
-            if media_url:
-                foto_path = await self._download_url(
-                    media_url, f"./uploads/fotos/{key.get('id', 'foto')}.jpg"
-                )
+            msg_id = key.get("id", "foto")
+            save_path = f"./uploads/fotos/{msg_id}.jpg"
+            foto_path = await self.download_media(msg_id, save_path)
+            if not foto_path:
+                media_url = message.get("imageMessage", {}).get("url")
+                if media_url:
+                    foto_path = await self._download_url(media_url, save_path)
             texto = legenda
 
         return IncomingMessage(
@@ -127,7 +136,7 @@ class WhatsAppAdapter(BaseAdapter):
                     headers=self.headers,
                     json=payload
                 )
-                return resp.status_code == 200
+                return resp.status_code in (200, 201)
         except Exception:
             return False
 
@@ -151,12 +160,12 @@ class WhatsAppAdapter(BaseAdapter):
                     headers=self.headers,
                     json=payload
                 )
-                return resp.status_code == 200
+                return resp.status_code in (200, 201)
         except Exception:
             return False
 
     async def download_media(self, media_id: str, save_path: str) -> str:
-        """Baixa mídia via Evolution API."""
+        """Baixa mídia via Evolution API (descriptografa automaticamente)."""
         try:
             async with httpx.AsyncClient(timeout=self._TIMEOUT) as client:
                 resp = await client.post(
@@ -164,15 +173,22 @@ class WhatsAppAdapter(BaseAdapter):
                     headers=self.headers,
                     json={"message": {"key": {"id": media_id}}}
                 )
-                if resp.status_code == 200:
+                if resp.status_code in (200, 201):
                     import base64
                     data = resp.json()
+                    b64 = data.get("base64", "")
+                    if not b64:
+                        logger.warning("download_media: resposta sem base64 para %s", media_id)
+                        return ""
                     os.makedirs(os.path.dirname(save_path), exist_ok=True)
                     with open(save_path, "wb") as f:
-                        f.write(base64.b64decode(data.get("base64", "")))
+                        f.write(base64.b64decode(b64))
+                    logger.info("download_media: salvo %s (%d bytes)", save_path, os.path.getsize(save_path))
                     return save_path
-        except Exception:
-            pass
+                else:
+                    logger.warning("download_media: status=%d para %s", resp.status_code, media_id)
+        except Exception as exc:
+            logger.error("download_media: erro para %s: %s", media_id, exc)
         return ""
 
     async def _download_url(self, url: str, save_path: str) -> str:

@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from app.core.config import settings
 from app.database import init_db
 from app.routes import (
-    empresas, obras, usuarios, servicos, efetivo,
+    empresas, obras, usuarios, servicos, efetivo, funcoes,
     anotacoes, materiais, equipamentos, clima, fotos,
     rdo, telegram_webhook, whatsapp_webhook
 )
@@ -20,6 +20,7 @@ from app.routes import diario as diario_routes
 from app.routes import alertas as alertas_routes
 from app.routes import auditoria as auditoria_routes
 from app.routes import dashboard as dashboard_routes
+from app.routes import whatsapp_instancias as whatsapp_instancias_routes
 
 app = FastAPI(
     title=settings.app_name,
@@ -53,12 +54,14 @@ app.include_router(obras.router, prefix="/api")
 app.include_router(usuarios.router, prefix="/api")
 app.include_router(servicos.router, prefix="/api")
 app.include_router(efetivo.router, prefix="/api")
+app.include_router(funcoes.router, prefix="/api")
 app.include_router(anotacoes.router, prefix="/api")
 app.include_router(materiais.router, prefix="/api")
 app.include_router(equipamentos.router, prefix="/api")
 app.include_router(clima.router, prefix="/api")
 app.include_router(fotos.router, prefix="/api")
 app.include_router(rdo.router, prefix="/api")
+app.include_router(whatsapp_instancias_routes.router, prefix="/api")
 
 # Webhook routes (sem /api — são endpoints públicos para bots)
 app.include_router(telegram_webhook.router)

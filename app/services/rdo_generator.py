@@ -139,9 +139,18 @@ def gerar_rdo_data(obra_id: int, data_ref: date, db: Session) -> dict:
         Foto.obra_id == obra_id, Foto.data == data_ref
     ).all()
 
-    total_efetivo = sum(e.quantidade for e in efetivo)
-    total_proprio = sum(e.quantidade for e in efetivo if not e.empresa or str(e.empresa).lower() == "própria")
-    total_terceiros = max(total_efetivo - total_proprio, 0)
+    total_proprio = sum(
+        e.quantidade for e in efetivo
+        if (hasattr(e.tipo, 'value') and e.tipo.value == "proprio")
+        or e.tipo == "proprio"
+        or (not e.empresa or str(e.empresa).lower() == "própria")
+    )
+    total_terceiros = sum(
+        e.quantidade for e in efetivo
+        if (hasattr(e.tipo, 'value') and e.tipo.value == "empreiteiro")
+        or e.tipo == "empreiteiro"
+    )
+    total_efetivo = total_proprio + total_terceiros
 
     expediente = db.query(Expediente).filter(
         Expediente.obra_id == obra_id, Expediente.data == data_ref

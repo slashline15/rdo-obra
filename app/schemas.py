@@ -83,14 +83,64 @@ class ServicoResponse(ServicoBase, ORMModel):
     created_at: datetime
 
 
+# === Função ===
+class FuncaoBase(BaseModel):
+    nome: str
+    empresa_id: Optional[int] = None
+
+class FuncaoCreate(FuncaoBase):
+    pass
+
+class FuncaoResponse(FuncaoBase, ORMModel):
+    id: int
+    ativa: bool
+    created_at: datetime
+
+class FuncaoUpdate(BaseModel):
+    nome: Optional[str] = None
+    ativa: Optional[bool] = None
+
+
+# === Colaborador ===
+class ColaboradorBase(BaseModel):
+    nome: str
+    apelido: Optional[str] = None
+    funcao_id: Optional[int] = None
+    obra_id: Optional[int] = None
+    empresa_id: Optional[int] = None
+    tipo_vinculo: Optional[str] = None
+    observacoes: Optional[str] = None
+
+class ColaboradorCreate(ColaboradorBase):
+    pass
+
+class ColaboradorResponse(ColaboradorBase, ORMModel):
+    id: int
+    ativo: bool
+    qrcode_hash: Optional[str] = None
+    created_at: datetime
+
+class ColaboradorUpdate(BaseModel):
+    nome: Optional[str] = None
+    apelido: Optional[str] = None
+    funcao_id: Optional[int] = None
+    obra_id: Optional[int] = None
+    ativo: Optional[bool] = None
+    observacoes: Optional[str] = None
+
+
 # === Efetivo ===
 class EfetivoBase(BaseModel):
     obra_id: int
     data: Optional[date] = None
-    funcao: str
+    tipo: Optional[str] = "proprio"
+    funcao: Optional[str] = None
+    funcao_id: Optional[int] = None
     quantidade: int
-    empresa: Optional[str] = "própria"
+    empresa: Optional[str] = None
+    colaborador_id: Optional[int] = None
     observacoes: Optional[str] = None
+    observacao_interna: Optional[str] = None
     registrado_por: Optional[str] = None
     texto_original: Optional[str] = None
 
@@ -230,10 +280,13 @@ class RDORequest(BaseModel):
 
 class EfetivoUpdate(BaseModel):
     funcao: Optional[str] = None
+    funcao_id: Optional[int] = None
     quantidade: Optional[int] = None
     empresa: Optional[str] = None
     tipo: Optional[str] = None
+    colaborador_id: Optional[int] = None
     observacoes: Optional[str] = None
+    observacao_interna: Optional[str] = None
 
 class AtividadeUpdate(BaseModel):
     status: Optional[str] = None

@@ -102,10 +102,15 @@ def painel_diario(obra_id: int, data_ref: date, db: Session = Depends(get_db),
         }
 
     def _serialize_efetivo(e):
+        funcao_nome = e.funcao
+        if e.funcao_id and e.funcao_ref:
+            funcao_nome = e.funcao_ref.nome
         return {
             "id": e.id, "tipo": e.tipo.value if hasattr(e.tipo, 'value') else e.tipo,
-            "funcao": e.funcao, "quantidade": e.quantidade, "empresa": e.empresa,
-            "observacoes": e.observacoes, "registrado_por": e.registrado_por,
+            "funcao": funcao_nome, "funcao_id": e.funcao_id,
+            "quantidade": e.quantidade, "empresa": e.empresa,
+            "observacoes": e.observacoes, "observacao_interna": e.observacao_interna,
+            "registrado_por": e.registrado_por,
         }
 
     def _serialize_clima(c):

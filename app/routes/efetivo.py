@@ -5,7 +5,7 @@ from datetime import date
 from sqlalchemy import func
 
 from app.database import get_db
-from app.models import Efetivo
+from app.models import Efetivo, Funcao
 from app.schemas import EfetivoCreate, EfetivoResponse, EfetivoUpdate
 from app.core.auth import get_current_user
 from app.core.diary_lock import check_diary_editable
@@ -73,24 +73,65 @@ def listar_efetivo(
 @router.get("/resumo/{obra_id}")
 def resumo_efetivo(obra_id: int, data_ref: date = None, db: Session = Depends(get_db),
                    current_user=Depends(get_current_user)):
-    """Retorna resumo do efetivo (total por função) para uma obra/data"""
+    """Retorna resumo do efetivo separado em próprio (por função) e terceiros (por empresa).
+
+    Formato RDO:
+      Efetivo Próprio  → subtotais por função
+      Efetivo Terceiros → subtotais por empresa
+      Total Geral       = próprio + terceiros
+    """
     ensure_obra_access(current_user, obra_id, required_level=3)
     if not data_ref:
         data_ref = date.today()
-    registros = db.query(
-        Efetivo.funcao,
-        func.sum(Efetivo.quantidade).label("total")
-    ).filter(
-        Efetivo.obra_id == obra_id,
-        Efetivo.data == data_ref
-    ).group_by(Efetivo.funcao).all()
 
-    total_geral = sum(r.total for r in registros)
+    base = db.query(Efetivo).filter(Efetivo.obra_id == obra_id, Efetivo.data == data_ref)
+
+    # --- Próprio: subtotais por função ---
+    proprio_q = (
+        db.query(
+            Efetivo.funcao,
+            Efetivo.funcao_id,
+            Funcao.nome.label("funcao_nome"),
+            func.sum(Efetivo.quantidade).label("total"),
+        )
+        .outerjoin(Funcao, Efetivo.funcao_id == Funcao.id)
+        .filter(Efetivo.obra_id == obra_id, Efetivo.data == data_ref, Efetivo.tipo == "proprio")
+        .group_by(Efetivo.funcao, Efetivo.funcao_id, Funcao.nome)
+        .all()
+    )
+    proprio_items = []
+    for r in proprio_q:
+        nome = r.funcao_nome or r.funcao or "Sem função"
+        proprio_items.append({"funcao": nome, "funcao_id": r.funcao_id, "quantidade": r.total})
+    total_proprio = sum(i["quantidade"] for i in proprio_items)
+
+    # --- Terceiros: subtotais por empresa ---
+    terceiro_q = (
+        db.query(
+            Efetivo.empresa,
+            func.sum(Efetivo.quantidade).label("total"),
+        )
+        .filter(Efetivo.obra_id == obra_id, Efetivo.data == data_ref, Efetivo.tipo == "empreiteiro")
+        .group_by(Efetivo.empresa)
+        .all()
+    )
+    terceiro_items = []
+    for r in terceiro_q:
+        terceiro_items.append({"empresa": r.empresa or "Sem empresa", "quantidade": r.total})
+    total_terceiros = sum(i["quantidade"] for i in terceiro_items)
+
     return {
         "data": str(data_ref),
         "obra_id": obra_id,
-        "total": total_geral,
-        "por_funcao": [{"funcao": r.funcao, "quantidade": r.total} for r in registros]
+        "proprio": {
+            "por_funcao": proprio_items,
+            "total": total_proprio,
+        },
+        "terceiros": {
+            "por_empresa": terceiro_items,
+            "total": total_terceiros,
+        },
+        "total_geral": total_proprio + total_terceiros,
     }
 
 
