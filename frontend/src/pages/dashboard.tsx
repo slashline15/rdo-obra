@@ -145,10 +145,10 @@ export default function DashboardPage() {
   const chartData = useMemo(() => {
     if (!dashData?.tendencias) return [];
     const map = new Map();
-    dashData.tendencias.efetivo_diario.forEach((d) => {
+    (dashData.tendencias.efetivo_diario ?? []).forEach((d) => {
       map.set(d.data, { data: d.data, efetivo: d.total, atividades: 0 });
     });
-    dashData.tendencias.atividades_diario.forEach((d) => {
+    (dashData.tendencias.atividades_diario ?? []).forEach((d) => {
       const existing = map.get(d.data) || { data: d.data, efetivo: 0 };
       map.set(d.data, { ...existing, atividades: d.total });
     });

@@ -659,7 +659,7 @@ function EmptyState() {
 }
 
 function TimelineBlock({ items }: { items: PainelData["timeline"] }) {
-  if (!items.length) return <EmptyState />;
+  if (!items?.length) return <EmptyState />;
 
   const typeIcon: Record<string, ReactNode> = {
     atividade: <Plus className="h-3.5 w-3.5 text-blue-400" />,
@@ -714,29 +714,29 @@ function SummaryGrid({ painel }: { painel: PainelData }) {
       <div className="rounded-2xl border bg-card/40 p-4 backdrop-blur-sm">
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Efetivo Geral</p>
         <div className="flex items-end gap-2">
-          <span className="text-2xl font-bold tracking-tight">{painel.total_efetivo.geral}</span>
+          <span className="text-2xl font-bold tracking-tight">{painel.total_efetivo?.geral ?? 0}</span>
           <span className="text-xs text-muted-foreground mb-1">colaboradores</span>
         </div>
       </div>
       <div className="rounded-2xl border bg-card/40 p-4 backdrop-blur-sm">
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Atividades</p>
         <div className="flex items-end gap-2">
-          <span className="text-2xl font-bold tracking-tight text-primary">{painel.atividades.concluidas.length}</span>
-          <span className="text-xs text-muted-foreground mb-1">de {painel.atividades.iniciadas.length + painel.atividades.em_andamento.length + painel.atividades.concluidas.length} totais</span>
+          <span className="text-2xl font-bold tracking-tight text-primary">{painel.atividades?.concluidas?.length ?? 0}</span>
+          <span className="text-xs text-muted-foreground mb-1">de {(painel.atividades?.iniciadas?.length ?? 0) + (painel.atividades?.em_andamento?.length ?? 0) + (painel.atividades?.concluidas?.length ?? 0)} totais</span>
         </div>
       </div>
       <div className="rounded-2xl border bg-card/40 p-4 backdrop-blur-sm">
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Clima Predom.</p>
         <div className="flex items-end gap-2 text-sky-400">
           <Cloud className="h-5 w-5 mb-1" />
-          <span className="text-xl font-bold tracking-tight capitalize">{painel.clima[0]?.condicao ?? "—"}</span>
+          <span className="text-xl font-bold tracking-tight capitalize">{painel.clima?.[0]?.condicao ?? "—"}</span>
         </div>
       </div>
       <div className="rounded-2xl border bg-card/40 p-4 backdrop-blur-sm">
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Alertas</p>
         <div className="flex items-end gap-2">
-          <span className={`text-2xl font-bold tracking-tight ${painel.alertas.filter(a => !a.resolvido).length > 0 ? "text-amber-500" : "text-muted-foreground/30"}`}>
-            {painel.alertas.filter(a => !a.resolvido).length}
+          <span className={`text-2xl font-bold tracking-tight ${(painel.alertas ?? []).filter(a => !a.resolvido).length > 0 ? "text-amber-500" : "text-muted-foreground/30"}`}>
+            {(painel.alertas ?? []).filter(a => !a.resolvido).length}
           </span>
           <span className="text-xs text-muted-foreground mb-1">pendentes</span>
         </div>
@@ -905,7 +905,7 @@ export default function DiarioPage() {
   if (error) return <div className="p-8"><p className="text-destructive">{error.message}</p></div>;
   if (!painel) return null;
 
-  const alertasAtivos = painel.alertas.filter((a) => !a.resolvido);
+  const alertasAtivos = (painel.alertas ?? []).filter((a) => !a.resolvido);
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
@@ -1198,7 +1198,7 @@ export default function DiarioPage() {
 
              <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
                {rightPanel === "timeline" ? (
-                 <TimelineBlock items={painel.timeline} />
+                 <TimelineBlock items={painel.timeline ?? []} />
                ) : (
                   <div className="space-y-3">
                     {auditoria.isLoading ? (
